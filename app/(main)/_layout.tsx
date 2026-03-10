@@ -73,11 +73,20 @@ export default function MainLayout(): React.JSX.Element {
         }}
       />
       <Tabs.Screen
-        name="restaurant"
+        name="analytics"
         options={{
-          title: 'Restaurant',
+          title: 'Analytics',
           tabBarIcon: ({ focused }) => (
-            <TabIcon name="storefront-outline" focused={focused} />
+            <TabIcon name="bar-chart-outline" focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="finance"
+        options={{
+          title: 'Finance',
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name="wallet-outline" focused={focused} />
           ),
         }}
       />
@@ -88,6 +97,13 @@ export default function MainLayout(): React.JSX.Element {
           tabBarIcon: ({ focused }) => (
             <TabIcon name="person-outline" focused={focused} />
           ),
+        }}
+      />
+      {/* Restaurant is still accessible via profile/navigation but hidden from tabs */}
+      <Tabs.Screen
+        name="restaurant"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

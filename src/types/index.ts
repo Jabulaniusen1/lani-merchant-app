@@ -43,6 +43,8 @@ export interface Restaurant {
   rating?: number;
   reviewCount?: number;
   totalReviews?: number;
+  isBusy?: boolean;
+  busyMessage?: string | null;
 }
 
 export interface MenuCategory {
@@ -100,6 +102,8 @@ export interface Order {
   createdAt: string;
   updatedAt?: string;
   confirmedAt?: string;
+  estimatedPrepTime?: number;
+  cancelReason?: string;
   items?: OrderItem[];
   orderItems?: OrderItem[];
   restaurant?: Restaurant;
@@ -184,4 +188,86 @@ export interface RiderAssignedPayload {
   orderId?: string;
   rider?: RiderProfile;
   message?: string;
+}
+
+// ─── Finance types ────────────────────────────────────────────────────────────
+
+export interface BankAccount {
+  id: string;
+  accountName: string;
+  accountNumber: string;
+  bankName: string;
+  bankCode: string;
+}
+
+export interface EarningsSummary {
+  availableBalance: number;
+  totalEarned: number;
+  totalPaidOut: number;
+  today: { revenue: number; orders: number };
+  thisWeek: { revenue: number; orders: number };
+  thisMonth: { revenue: number; orders: number };
+}
+
+export interface Transaction {
+  id: string;
+  orderId: string;
+  orderNumber?: string;
+  customerName?: string;
+  restaurantName?: string;
+  items?: string | Array<{ quantity?: number; menuItem?: { name?: string }; name?: string }>;
+  orderTotal: number;
+  merchantEarning: number;
+  platformFee: number;
+  commissionRate: number;
+  createdAt: string;
+}
+
+export interface Payout {
+  id: string;
+  amount: number;
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  bankName?: string;
+  accountNumber?: string;
+  accountName?: string;
+  requestedAt: string;
+  processedAt?: string;
+}
+
+export interface Bank {
+  id: number;
+  code: string;
+  name: string;
+}
+
+// ─── Analytics types ──────────────────────────────────────────────────────────
+
+export interface OverviewStats {
+  totalOrders: number;
+  revenue: number;
+  completionRate: number;
+  cancelledOrders: number;
+  avgOrderValue: number;
+  period: string;
+}
+
+export interface ChartDataPoint {
+  date: string;
+  label: string;
+  revenue: number;
+  orders: number;
+}
+
+export interface BestSellerItem {
+  menuItemId: string;
+  name: string;
+  totalQuantitySold: number;
+  totalRevenue: number;
+  imageUrl?: string | null;
+}
+
+export interface PeakHour {
+  hour: number;
+  label: string;
+  orders: number;
 }

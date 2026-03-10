@@ -4,6 +4,7 @@ import {
   createRestaurantApi,
   updateRestaurantApi,
 } from '../api/restaurant.api';
+import { toggleBusyModeApi } from '../api/analytics.api';
 import type { Restaurant } from '../types';
 
 interface RestaurantState {
@@ -15,6 +16,7 @@ interface RestaurantState {
   createRestaurant: (data: Partial<Restaurant>) => Promise<Restaurant>;
   updateRestaurant: (id: string, data: Partial<Restaurant>) => Promise<Restaurant>;
   toggleOpen: (id: string, isOpen: boolean) => Promise<unknown>;
+  toggleBusyMode: (id: string, isBusy: boolean, busyMessage?: string) => Promise<void>;
 }
 
 const useRestaurantStore = create<RestaurantState>((set, get) => ({
@@ -73,6 +75,21 @@ const useRestaurantStore = create<RestaurantState>((set, get) => ({
           : state.activeRestaurant,
     }));
     return updated;
+  },
+
+  toggleBusyMode: async (id: string, isBusy: boolean, busyMessage?: string): Promise<void> => {
+    await toggleBusyModeApi(id, isBusy, busyMessage);
+    set((state) => ({
+      restaurants: state.restaurants.map((r) =>
+        r.id === id
+          ? { ...r, isBusy, busyMessage: isBusy ? (busyMessage ?? null) : null }
+          : r
+      ),
+      activeRestaurant:
+        state.activeRestaurant?.id === id
+          ? { ...state.activeRestaurant, isBusy, busyMessage: isBusy ? (busyMessage ?? null) : null }
+          : state.activeRestaurant,
+    }));
   },
 }));
 

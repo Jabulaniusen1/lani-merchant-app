@@ -158,6 +158,24 @@ export default function ProfileScreen(): React.JSX.Element {
           />
           <View style={styles.divider} />
           <MenuItem
+            icon="wallet-outline"
+            label="Finance & Payouts"
+            onPress={() => router.push('/(main)/finance')}
+          />
+          <View style={styles.divider} />
+          <MenuItem
+            icon="bar-chart-outline"
+            label="Analytics"
+            onPress={() => router.push('/(main)/analytics')}
+          />
+          <View style={styles.divider} />
+          <MenuItem
+            icon="card-outline"
+            label="Bank Account"
+            onPress={() => router.push('/(main)/finance/bank-account')}
+          />
+          <View style={styles.divider} />
+          <MenuItem
             icon="notifications-outline"
             label="Notification Settings"
             onPress={() => showToast({ type: 'info', message: 'Notification settings coming soon' })}

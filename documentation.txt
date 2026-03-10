@@ -63,6 +63,20 @@ Authorization: Bearer <token>
 
 ---
 
+## Platform Fee Structure
+
+| Source | Recipient |
+|--------|-----------|
+| 10% of order subtotal | Platform |
+| 90% of order subtotal | Merchant |
+| Service charge (₦200 flat per order) | Platform (full amount) |
+| 10% of delivery fee | Platform |
+| 90% of delivery fee | Rider |
+
+> `MERCHANT_COMMISSION_RATE=0.90` is set in `.env`. The merchant's available payout balance is calculated as `sum(subtotal × 0.90)` across all their delivered + paid orders, minus any completed payouts.
+
+---
+
 ## Endpoints
 
 ---
@@ -280,6 +294,9 @@ Browse all approved restaurants. Supports filtering.
         "logoUrl": null,
         "coverUrl": null,
         "isOpen": true,
+        "isBusy": false,
+        "busyMessage": null,
+        "avgPrepTime": 20,
         "rating": 4.5,
         "totalReviews": 12,
         "openingTime": "08:00",
@@ -306,6 +323,9 @@ Get a single restaurant with its full menu.
     "restaurant": {
       "id": "uuid",
       "name": "Mama Emeka Kitchen",
+      "isBusy": false,
+      "busyMessage": null,
+      "avgPrepTime": 20,
       "categories": [
         {
           "id": "uuid",
@@ -371,6 +391,38 @@ Update a restaurant.
   "closingTime": "23:00"
 }
 ```
+
+---
+
+#### PATCH `/restaurants/:id/busy`
+Toggle busy mode on or off for a restaurant.
+
+**Protected** | `MERCHANT` only
+
+**Request Body:**
+```json
+{
+  "isBusy": true,
+  "busyMessage": "Very busy right now, expect 45min wait"
+}
+```
+
+> `busyMessage` is optional. If omitted when enabling busy mode, defaults to `"Restaurant is very busy right now"`.
+> When disabling (`isBusy: false`), `busyMessage` is automatically cleared.
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Busy mode enabled",
+  "data": {
+    "restaurant": { ...updated restaurant }
+  }
+}
+```
+
+**Socket event emitted:**
+- `restaurant_busy_updated` → to `restaurant_customers_{id}` room
 
 ---
 
@@ -575,7 +627,7 @@ Place a new order.
 | 10 – 15 km | ₦2,500 |
 | 15 km+ | ₦3,000 |
 
-- `serviceCharge` is a flat ₦200 on every order
+- `serviceCharge` is a flat ₦200 on every order — goes entirely to the platform
 - If either the restaurant or address has no coordinates, delivery fee defaults to ₦1,500
 
 ---
@@ -611,21 +663,37 @@ Update order status (merchant action).
 
 **Protected** | `MERCHANT` only
 
-**Request Body:**
+**Request Body — confirming/preparing:**
 ```json
 {
-  "status": "CONFIRMED"
+  "status": "PREPARING",
+  "estimatedPrepTime": 25
 }
 ```
 
-**Allowed statuses for merchant:** `PREPARING` → `READY_FOR_PICKUP` → `CANCELLED`
+**Request Body — cancellation:**
+```json
+{
+  "status": "CANCELLED",
+  "cancelReason": "Item out of stock"
+}
+```
 
-> `CONFIRMED` is no longer a merchant action — it is set automatically when payment is received.
+**Allowed statuses for merchant:** `CONFIRMED` → `PREPARING` → `READY_FOR_PICKUP` → `CANCELLED`
+
+**Fields:**
+| Field | Required | Description |
+|-------|----------|-------------|
+| `status` | Yes | New order status |
+| `estimatedPrepTime` | No | Minutes to prepare — set when moving to `PREPARING` |
+| `cancelReason` | **Yes if cancelling** | Reason shown to the customer |
+
+> `CONFIRMED` is set automatically when payment is received via webhook. The merchant's first manual action is typically `PREPARING`.
 
 **Socket events emitted:**
-- `order_status_updated` → to customer tracking the order
+- `order_status_updated` → to customer tracking the order (includes `estimatedPrepTime` and `cancelReason` when set)
 - `delivery_available` → to all riders (when status is `PREPARING` or `READY_FOR_PICKUP`)
-- `order_cancelled` → to customer (when merchant cancels)
+- `order_cancelled` → to customer's personal room (when merchant cancels, includes reason)
 
 ---
 
@@ -827,7 +895,7 @@ Submit a review after a delivered order.
   "orderId": "uuid",
   "restaurantRating": 5,
   "riderRating": 4,
-  "comment": "Jollof was 🔥, rider was fast!"
+  "comment": "Jollof was fire, rider was fast!"
 }
 ```
 
@@ -850,6 +918,412 @@ Get all reviews for a restaurant.
 Get all reviews for the authenticated rider.
 
 **Protected** | `RIDER` only
+
+---
+
+### 🏦 BANK ACCOUNT
+
+All bank account routes require `MERCHANT` role.
+
+#### GET `/bank-account/banks`
+Fetch the list of all Nigerian banks from Paystack.
+
+**Protected** | `MERCHANT` only
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Banks fetched",
+  "data": {
+    "banks": [
+      { "name": "Zenith Bank", "code": "057" },
+      { "name": "GTBank", "code": "058" }
+    ]
+  }
+}
+```
+
+> Cache this list on the frontend — it changes rarely.
+
+---
+
+#### POST `/bank-account/verify`
+Verify an account number before saving. Returns the account name so the merchant can confirm it's correct.
+
+**Protected** | `MERCHANT` only
+
+**Request Body:**
+```json
+{
+  "accountNumber": "0123456789",
+  "bankCode": "058"
+}
+```
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Account verified",
+  "data": {
+    "accountName": "JABULANI DOE",
+    "accountNumber": "0123456789"
+  }
+}
+```
+
+---
+
+#### POST `/bank-account`
+Save a bank account. Also creates a Paystack Transfer Recipient required for payouts.
+
+**Protected** | `MERCHANT` only
+
+**Request Body:**
+```json
+{
+  "accountName": "JABULANI DOE",
+  "accountNumber": "0123456789",
+  "bankName": "GTBank",
+  "bankCode": "058"
+}
+```
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Bank account saved successfully",
+  "data": {
+    "bankAccount": {
+      "id": "uuid",
+      "merchantId": "uuid",
+      "accountName": "JABULANI DOE",
+      "accountNumber": "0123456789",
+      "bankName": "GTBank",
+      "bankCode": "058",
+      "recipientCode": "RCP_xxxxxx",
+      "isVerified": true
+    }
+  }
+}
+```
+
+**Notes:**
+- Calling this again updates the existing account (upsert)
+- `recipientCode` is the Paystack Transfer Recipient code — required for payouts
+
+---
+
+#### GET `/bank-account`
+Get the merchant's saved bank account.
+
+**Protected** | `MERCHANT` only
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Bank account fetched",
+  "data": {
+    "bankAccount": { ...bank account object } // null if none saved
+  }
+}
+```
+
+---
+
+### 💰 PAYOUTS
+
+All payout routes require `MERCHANT` role.
+
+#### GET `/payouts/earnings`
+Get the merchant's earnings summary across all their restaurants.
+
+**Protected** | `MERCHANT` only
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Earnings fetched",
+  "data": {
+    "balance": {
+      "available": 45000,
+      "totalEarned": 50000,
+      "totalPaidOut": 5000
+    },
+    "today": {
+      "earnings": 9000,
+      "orders": 4
+    },
+    "thisWeek": {
+      "earnings": 27000,
+      "orders": 12
+    },
+    "thisMonth": {
+      "earnings": 45000,
+      "orders": 20
+    },
+    "commissionRate": 0.9
+  }
+}
+```
+
+**Notes:**
+- `available` = total earned minus completed payouts
+- All amounts are in Naira
+- Earnings are calculated as `subtotal × 0.90` — delivery fee and service charge are excluded (those go to riders and the platform)
+
+---
+
+#### GET `/payouts/transactions`
+Get per-order transaction history showing what the merchant earned on each order.
+
+**Protected** | `MERCHANT` only
+
+**Query Params:**
+| Param | Default | Description |
+|-------|---------|-------------|
+| `page` | 1 | Page number |
+| `limit` | 20 | Items per page |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Transactions fetched",
+  "data": {
+    "transactions": [
+      {
+        "id": "uuid",
+        "subtotal": 5000,
+        "total": 6700,
+        "serviceCharge": 200,
+        "status": "DELIVERED",
+        "merchantEarning": 4500,
+        "platformFee": 700,
+        "createdAt": "2026-03-10T14:00:00.000Z",
+        "restaurant": { "name": "Mama Emeka Kitchen" },
+        "user": { "firstName": "Jabulani", "lastName": "Doe" },
+        "items": [ ...order items ]
+      }
+    ],
+    "pagination": {
+      "total": 40,
+      "page": 1,
+      "limit": 20,
+      "pages": 2
+    }
+  }
+}
+```
+
+> `platformFee` = 10% of subtotal + service charge (₦200). `merchantEarning` = 90% of subtotal.
+
+---
+
+#### POST `/payouts/request`
+Request a payout to the merchant's registered bank account via Paystack Transfer.
+
+**Protected** | `MERCHANT` only
+
+**Request Body:**
+```json
+{
+  "amount": 20000
+}
+```
+
+**Response `201`:**
+```json
+{
+  "success": true,
+  "message": "Payout request submitted",
+  "data": {
+    "payout": {
+      "id": "uuid",
+      "merchantId": "uuid",
+      "amount": 20000,
+      "status": "PROCESSING",
+      "reference": "PAYOUT-merchantId-timestamp",
+      "narration": "Payout to JABULANI DOE",
+      "requestedAt": "2026-03-10T14:00:00.000Z"
+    },
+    "bankAccount": {
+      "accountName": "JABULANI DOE",
+      "bankName": "GTBank",
+      "accountNumber": "****6789"
+    }
+  }
+}
+```
+
+**Validation:**
+- Merchant must have a verified bank account with a `recipientCode`
+- `amount` must be ≥ ₦1,000
+- `amount` must not exceed available balance
+- Cannot request a new payout while one is `PENDING` or `PROCESSING`
+
+**Notes:**
+- Paystack Transfers must be enabled on your Paystack dashboard (Settings → Preferences → Transfers)
+- Status will be `PROCESSING` initially; Paystack sends a webhook when it completes
+
+---
+
+#### GET `/payouts/history`
+Get all past payout requests for the merchant.
+
+**Protected** | `MERCHANT` only
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Payout history fetched",
+  "data": {
+    "payouts": [
+      {
+        "id": "uuid",
+        "amount": 20000,
+        "status": "COMPLETED",
+        "reference": "PAYOUT-...",
+        "narration": "Payout to JABULANI DOE",
+        "requestedAt": "2026-03-10T14:00:00.000Z",
+        "processedAt": "2026-03-10T14:05:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+**Payout statuses:** `PENDING` → `PROCESSING` → `COMPLETED` | `FAILED`
+
+---
+
+### 📊 ANALYTICS
+
+All analytics routes require `MERCHANT` role.
+
+#### GET `/analytics/:restaurantId/overview`
+Get key stats for a restaurant over a time period.
+
+**Protected** | `MERCHANT` only
+
+**Query Params:**
+| Param | Default | Options |
+|-------|---------|---------|
+| `period` | `7d` | `1d`, `7d`, `30d` |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Stats fetched",
+  "data": {
+    "period": "7d",
+    "totalOrders": 42,
+    "deliveredOrders": 38,
+    "cancelledOrders": 2,
+    "completionRate": 90,
+    "revenue": 95000,
+    "avgOrderValue": 2500
+  }
+}
+```
+
+---
+
+#### GET `/analytics/:restaurantId/revenue`
+Get daily revenue data for charting.
+
+**Protected** | `MERCHANT` only
+
+**Query Params:**
+| Param | Default | Description |
+|-------|---------|-------------|
+| `days` | `7` | Number of past days to include |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Revenue chart fetched",
+  "data": {
+    "chartData": [
+      {
+        "date": "2026-03-04",
+        "label": "Tue 4",
+        "revenue": 12500,
+        "orders": 5
+      },
+      {
+        "date": "2026-03-05",
+        "label": "Wed 5",
+        "revenue": 18000,
+        "orders": 7
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### GET `/analytics/:restaurantId/best-sellers`
+Get the top selling menu items.
+
+**Protected** | `MERCHANT` only
+
+**Query Params:**
+| Param | Default | Description |
+|-------|---------|-------------|
+| `limit` | `10` | Number of items to return |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Best sellers fetched",
+  "data": {
+    "bestSellers": [
+      {
+        "menuItemId": "uuid",
+        "name": "Jollof Rice + Chicken",
+        "imageUrl": "https://res.cloudinary.com/...",
+        "price": 2500,
+        "totalQuantitySold": 84,
+        "totalRevenue": 210000,
+        "orderCount": 60
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### GET `/analytics/:restaurantId/peak-hours`
+Get order volume by hour of day (based on last 30 days). Use this to draw a bar chart of the busiest times.
+
+**Protected** | `MERCHANT` only
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Peak hours fetched",
+  "data": {
+    "peakHours": [
+      { "hour": 0, "label": "00:00", "orders": 0 },
+      { "hour": 12, "label": "12:00", "orders": 18 },
+      { "hour": 13, "label": "13:00", "orders": 25 }
+    ],
+    "peakHour": "13:00"
+  }
+}
+```
 
 ---
 
@@ -978,6 +1452,9 @@ socket.emit('join_merchant_room', restaurantId);
 
 // Rider app
 socket.emit('join_rider_room', riderId);
+
+// Customer browsing a restaurant page (to receive busy mode updates)
+socket.emit('join_restaurant_customers', restaurantId);
 ```
 
 ---
@@ -990,13 +1467,14 @@ socket.emit('join_rider_room', riderId);
 |-------|------|---------|-------------|
 | `new_order` | `restaurant_{id}` | `{ orderId, total, itemCount, preview, createdAt }` | New order placed |
 | `order_confirmed` | `restaurant_{id}` | `{ orderId, message }` | Payment received, order auto-confirmed |
-| `order_status_updated` | `order_{id}` | `{ orderId, status, updatedAt }` | Order status changed |
-| `order_cancelled` | `customer_{id}` or `restaurant_{id}` | `{ orderId, message }` | Order was cancelled |
+| `order_status_updated` | `order_{id}` | `{ orderId, status, estimatedPrepTime, cancelReason, updatedAt }` | Order status changed |
+| `order_cancelled` | `customer_{id}` or `restaurant_{id}` | `{ orderId, reason, message }` | Order was cancelled |
 | `rider_assigned` | `order_{id}` | `{ orderId, message }` | Rider accepted the delivery |
 | `delivery_available` | broadcast | `{ orderId, status, restaurantName }` | Order ready for rider pickup |
 | `delivery_status_updated` | `order_{id}` | `{ orderId, deliveryStatus, updatedAt }` | Rider updated delivery status |
 | `rider_location_updated` | `order_{id}` | `{ orderId, latitude, longitude }` | Rider location changed |
 | `order_delivered` | `customer_{id}` | `{ orderId, message }` | Order successfully delivered |
+| `restaurant_busy_updated` | `restaurant_customers_{id}` | `{ restaurantId, isBusy, busyMessage }` | Restaurant busy mode toggled |
 
 #### Events the CLIENT emits to SERVER
 
@@ -1006,6 +1484,7 @@ socket.emit('join_rider_room', riderId);
 | `join_merchant_room` | `restaurantId` | Merchant joins restaurant room |
 | `join_rider_room` | `riderId` | Rider joins personal room |
 | `track_order` | `orderId` | Join specific order room for live updates |
+| `join_restaurant_customers` | `restaurantId` | Join restaurant browsing room (busy mode updates) |
 
 ---
 
@@ -1019,7 +1498,8 @@ id, email, phone, firstName, lastName, role, isVerified, isActive, createdAt, up
 ### Restaurant
 ```
 id, merchantId, name, description, address, city, state, latitude, longitude,
-logoUrl, coverUrl, isOpen, isApproved, openingTime, closingTime, rating, totalReviews
+logoUrl, coverUrl, isOpen, isApproved, openingTime, closingTime, rating, totalReviews,
+isBusy, busyMessage, avgPrepTime, createdAt, updatedAt
 ```
 
 ### MenuItem
@@ -1030,7 +1510,9 @@ id, restaurantId, categoryId, name, description, price, imageUrl, isAvailable
 ### Order
 ```
 id, userId, restaurantId, addressId, status, paymentStatus, paymentRef,
-subtotal, deliveryFee, serviceCharge, total, note, createdAt, updatedAt
+subtotal, deliveryFee, serviceCharge, total, note,
+estimatedPrepTime, cancelReason, cancelledBy,
+createdAt, updatedAt
 ```
 
 ### Delivery
@@ -1042,6 +1524,18 @@ id, orderId, riderId, status, pickedUpAt, deliveredAt, createdAt, updatedAt
 ```
 id, userId, vehicleType, vehiclePlate, isAvailable, isApproved,
 currentLatitude, currentLongitude, rating, totalReviews
+```
+
+### MerchantBankAccount
+```
+id, merchantId, accountName, accountNumber, bankName, bankCode,
+recipientCode, isVerified, createdAt, updatedAt
+```
+
+### PayoutRequest
+```
+id, merchantId, amount, status (PENDING | PROCESSING | COMPLETED | FAILED),
+reference, narration, failureReason, requestedAt, processedAt
 ```
 
 ---
@@ -1060,4 +1554,1567 @@ GOOGLE_MAPS_API_KEY=your_google_maps_api_key
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
+
+# Platform commission
+MERCHANT_COMMISSION_RATE=0.90
+```
+# Lanieats API Documentation
+
+## Overview
+
+Lanieats is a food delivery platform for Nigeria with three client applications — Customer App, Merchant App, and Rider App — all powered by a single backend API.
+
+- **Base URL:** `http://localhost:8000/api/v1`
+- **Authentication:** Bearer Token (JWT)
+- **Content-Type:** `application/json`
+- **Payment Gateway:** Paystack (NGN)
+- **Real-time:** Socket.io
+
+---
+
+## Standard Response Format
+
+Every endpoint returns this structure:
+
+```json
+{
+  "success": true | false,
+  "message": "Human readable message",
+  "data": { } // present on success, omitted on error
+}
+```
+
+Error with validation:
+```json
+{
+  "success": false,
+  "message": "Validation failed",
+  "errors": [
+    { "field": "email", "message": "Please provide a valid email" }
+  ]
+}
+```
+
+---
+
+## Authentication
+
+All protected routes require this header:
+```
+Authorization: Bearer <token>
+```
+
+### Roles
+| Role | Description |
+|------|-------------|
+| `CUSTOMER` | Places orders, tracks delivery |
+| `MERCHANT` | Manages restaurants and menus, prepares and fulfills orders |
+| `RIDER` | Accepts and completes deliveries |
+| `ADMIN` | Platform management |
+
+---
+
+## Rate Limits
+
+| Route | Limit |
+|-------|-------|
+| All API routes | 100 requests / 15 min |
+| Auth routes | 10 requests / 15 min |
+
+---
+
+## Platform Fee Structure
+
+| Source | Recipient |
+|--------|-----------|
+| 10% of order subtotal | Platform |
+| 90% of order subtotal | Merchant |
+| Service charge (₦200 flat per order) | Platform (full amount) |
+| 10% of delivery fee | Platform |
+| 90% of delivery fee | Rider |
+
+> `MERCHANT_COMMISSION_RATE=0.90` is set in `.env`. The merchant's available payout balance is calculated as `sum(subtotal × 0.90)` across all their delivered + paid orders, minus any completed payouts.
+
+---
+
+## Endpoints
+
+---
+
+### 🔐 AUTH
+
+#### POST `/auth/register`
+Register a new user.
+
+**Public** | No token required
+
+**Request Body:**
+```json
+{
+  "firstName": "Jabulani",
+  "lastName": "Doe",
+  "email": "jab@test.com",
+  "phone": "08012345678",
+  "password": "password123",
+  "role": "CUSTOMER" // "CUSTOMER" | "MERCHANT" | "RIDER"
+}
+```
+
+**Response `201`:**
+```json
+{
+  "success": true,
+  "message": "Registration successful",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "user": {
+      "id": "uuid",
+      "firstName": "Jabulani",
+      "lastName": "Doe",
+      "email": "jab@test.com",
+      "phone": "08012345678",
+      "role": "CUSTOMER",
+      "isVerified": false,
+      "isActive": true,
+      "createdAt": "2026-02-25T00:00:00.000Z"
+    }
+  }
+}
+```
+
+**Notes:**
+- On `MERCHANT` registration, a `Merchant` profile is auto-created
+- On `RIDER` registration, a `Rider` profile is auto-created
+- Phone must be a valid Nigerian number (e.g. 080XXXXXXXX or +234XXXXXXXXX)
+
+---
+
+#### POST `/auth/login`
+Login with email and password.
+
+**Public** | No token required
+
+**Request Body:**
+```json
+{
+  "email": "jab@test.com",
+  "password": "password123"
+}
+```
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "user": {
+      "id": "uuid",
+      "firstName": "Jabulani",
+      "lastName": "Doe",
+      "email": "jab@test.com",
+      "role": "CUSTOMER"
+    }
+  }
+}
+```
+
+---
+
+#### GET `/auth/me`
+Get the currently authenticated user's profile.
+
+**Protected** | Any role
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "User fetched",
+  "data": {
+    "user": {
+      "id": "uuid",
+      "firstName": "Jabulani",
+      "lastName": "Doe",
+      "email": "jab@test.com",
+      "phone": "08012345678",
+      "role": "CUSTOMER",
+      "isVerified": false,
+      "createdAt": "2026-02-25T00:00:00.000Z",
+      "merchant": null,
+      "rider": null
+    }
+  }
+}
+```
+
+---
+
+### 🏠 ADDRESSES
+
+All address routes require authentication.
+
+#### POST `/addresses`
+Add a delivery address. Coordinates are auto-resolved via Google Maps Geocoding — the frontend does not need to provide them.
+
+**Protected** | Any role
+
+**Request Body:**
+```json
+{
+  "label": "Home",
+  "street": "15 Admiralty Way",
+  "city": "Lagos",
+  "state": "Lagos",
+  "isDefault": true
+}
+```
+
+> `latitude` and `longitude` are optional. If omitted, the backend automatically geocodes the address using Google Maps and saves the coordinates.
+
+**Response `201`:**
+```json
+{
+  "success": true,
+  "message": "Address added",
+  "data": {
+    "address": {
+      "id": "uuid",
+      "userId": "uuid",
+      "label": "Home",
+      "street": "15 Admiralty Way",
+      "city": "Lagos",
+      "state": "Lagos",
+      "latitude": 6.4281,
+      "longitude": 3.4219,
+      "isDefault": true,
+      "createdAt": "2026-02-25T00:00:00.000Z"
+    }
+  }
+}
+```
+
+---
+
+#### GET `/addresses`
+Get all addresses for the authenticated user.
+
+**Protected** | Any role
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Addresses fetched",
+  "data": {
+    "addresses": [ ...address objects ]
+  }
+}
+```
+
+---
+
+#### DELETE `/addresses/:id`
+Delete an address.
+
+**Protected** | Any role
+
+---
+
+### 🍽️ RESTAURANTS
+
+#### GET `/restaurants`
+Browse all approved restaurants. Supports filtering.
+
+**Public** | No token required
+
+**Query Params:**
+| Param | Type | Description |
+|-------|------|-------------|
+| `city` | string | Filter by city |
+| `search` | string | Search by name |
+
+**Example:** `GET /restaurants?city=Lagos&search=jollof`
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Restaurants fetched",
+  "data": {
+    "restaurants": [
+      {
+        "id": "uuid",
+        "name": "Mama Emeka Kitchen",
+        "description": "Authentic Nigerian cuisine",
+        "address": "12 Broad Street",
+        "city": "Lagos",
+        "state": "Lagos",
+        "logoUrl": null,
+        "coverUrl": null,
+        "isOpen": true,
+        "isBusy": false,
+        "busyMessage": null,
+        "avgPrepTime": 20,
+        "rating": 4.5,
+        "totalReviews": 12,
+        "openingTime": "08:00",
+        "closingTime": "22:00"
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### GET `/restaurants/:id`
+Get a single restaurant with its full menu.
+
+**Public** | No token required
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Restaurant fetched",
+  "data": {
+    "restaurant": {
+      "id": "uuid",
+      "name": "Mama Emeka Kitchen",
+      "isBusy": false,
+      "busyMessage": null,
+      "avgPrepTime": 20,
+      "categories": [
+        {
+          "id": "uuid",
+          "name": "Rice Dishes",
+          "menuItems": [
+            {
+              "id": "uuid",
+              "name": "Jollof Rice + Chicken",
+              "description": "Party jollof with smoky base",
+              "price": 2500,
+              "imageUrl": null,
+              "isAvailable": true
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+```
+
+---
+
+#### POST `/restaurants`
+Create a new restaurant.
+
+**Protected** | `MERCHANT` only
+
+**Request Body:**
+```json
+{
+  "name": "Mama Emeka Kitchen",
+  "description": "Authentic Nigerian cuisine",
+  "address": "12 Broad Street",
+  "city": "Lagos",
+  "state": "Lagos",
+  "openingTime": "08:00",
+  "closingTime": "22:00"
+}
+```
+
+---
+
+#### GET `/restaurants/merchant/me`
+Get all restaurants owned by the authenticated merchant.
+
+**Protected** | `MERCHANT` only
+
+---
+
+#### PATCH `/restaurants/:id`
+Update a restaurant.
+
+**Protected** | `MERCHANT` only
+
+**Request Body** (all fields optional):
+```json
+{
+  "name": "Updated Name",
+  "description": "Updated description",
+  "isOpen": true,
+  "openingTime": "09:00",
+  "closingTime": "23:00"
+}
+```
+
+---
+
+#### PATCH `/restaurants/:id/busy`
+Toggle busy mode on or off for a restaurant.
+
+**Protected** | `MERCHANT` only
+
+**Request Body:**
+```json
+{
+  "isBusy": true,
+  "busyMessage": "Very busy right now, expect 45min wait"
+}
+```
+
+> `busyMessage` is optional. If omitted when enabling busy mode, defaults to `"Restaurant is very busy right now"`.
+> When disabling (`isBusy: false`), `busyMessage` is automatically cleared.
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Busy mode enabled",
+  "data": {
+    "restaurant": { ...updated restaurant }
+  }
+}
+```
+
+**Socket event emitted:**
+- `restaurant_busy_updated` → to `restaurant_customers_{id}` room
+
+---
+
+#### POST `/restaurants/:id/logo`
+Upload or replace the restaurant's logo.
+
+**Protected** | `MERCHANT` only
+
+**Request:** `multipart/form-data`
+| Field | Type | Description |
+|-------|------|-------------|
+| `image` | file | Image file (JPEG, PNG, etc. — max 5MB) |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Logo uploaded",
+  "data": {
+    "restaurant": { ...updated restaurant }
+  }
+}
+```
+
+---
+
+#### POST `/restaurants/:id/cover`
+Upload or replace the restaurant's cover banner.
+
+**Protected** | `MERCHANT` only
+
+**Request:** `multipart/form-data`
+| Field | Type | Description |
+|-------|------|-------------|
+| `image` | file | Image file (JPEG, PNG, etc. — max 5MB) |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Cover uploaded",
+  "data": {
+    "restaurant": { ...updated restaurant }
+  }
+}
+```
+
+---
+
+### 🍖 MENU
+
+All menu routes are nested under restaurants: `/restaurants/:restaurantId/menu`
+
+#### GET `/restaurants/:restaurantId/menu`
+Get all menu items for a restaurant.
+
+**Public** | No token required
+
+---
+
+#### POST `/restaurants/:restaurantId/menu/categories`
+Create a menu category.
+
+**Protected** | `MERCHANT` only
+
+**Request Body:**
+```json
+{
+  "name": "Rice Dishes"
+}
+```
+
+---
+
+#### POST `/restaurants/:restaurantId/menu`
+Create a menu item.
+
+**Protected** | `MERCHANT` only
+
+**Request Body:**
+```json
+{
+  "name": "Jollof Rice + Chicken",
+  "description": "Party jollof with smoky base",
+  "price": 2500,
+  "categoryId": "uuid",
+  "imageUrl": "https://..."
+}
+```
+
+> `name`, `price`, and `categoryId` are **required**. The merchant must create a category first before adding items.
+
+---
+
+#### PUT `/restaurants/:restaurantId/menu/:itemId`
+Update a menu item.
+
+**Protected** | `MERCHANT` only
+
+**Request Body** (all fields optional):
+```json
+{
+  "name": "Updated name",
+  "price": 3000,
+  "isAvailable": false
+}
+```
+
+---
+
+#### DELETE `/restaurants/:restaurantId/menu/:itemId`
+Delete a menu item.
+
+**Protected** | `MERCHANT` only
+
+---
+
+#### POST `/restaurants/:restaurantId/menu/:itemId/image`
+Upload or replace a menu item's image.
+
+**Protected** | `MERCHANT` only
+
+**Request:** `multipart/form-data`
+| Field | Type | Description |
+|-------|------|-------------|
+| `image` | file | Image file (JPEG, PNG, etc. — max 5MB) |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Image uploaded",
+  "data": {
+    "menuItem": {
+      "id": "uuid",
+      "name": "Jollof Rice + Chicken",
+      "imageUrl": "https://res.cloudinary.com/...",
+      ...
+    }
+  }
+}
+```
+
+---
+
+### 📦 ORDERS
+
+#### POST `/orders`
+Place a new order.
+
+**Protected** | `CUSTOMER` only
+
+**Request Body:**
+```json
+{
+  "restaurantId": "uuid",
+  "addressId": "uuid",
+  "note": "Extra pepper please",
+  "items": [
+    {
+      "menuItemId": "uuid",
+      "quantity": 2
+    }
+  ]
+}
+```
+
+**Response `201`:**
+```json
+{
+  "success": true,
+  "message": "Order placed successfully",
+  "data": {
+    "order": {
+      "id": "uuid",
+      "status": "PENDING",
+      "paymentStatus": "PENDING",
+      "subtotal": 5000,
+      "deliveryFee": 1500,
+      "serviceCharge": 200,
+      "total": 6700,
+      "note": "Extra pepper please",
+      "items": [ ...order items ],
+      "restaurant": { ...restaurant },
+      "address": { ...address }
+    }
+  }
+}
+```
+
+**Notes:**
+- Restaurant must be `isOpen: true`
+- Address must belong to the authenticated customer
+- A `Delivery` record is automatically created with status `UNASSIGNED`
+- Socket event `new_order` is emitted to the merchant's restaurant room
+- `deliveryFee` is calculated from the distance between the restaurant and delivery address:
+
+| Distance | Delivery Fee |
+|----------|-------------|
+| 0 – 5 km | ₦1,500 |
+| 5 – 10 km | ₦2,000 |
+| 10 – 15 km | ₦2,500 |
+| 15 km+ | ₦3,000 |
+
+- `serviceCharge` is a flat ₦200 on every order — goes entirely to the platform
+- If either the restaurant or address has no coordinates, delivery fee defaults to ₦1,500
+
+---
+
+#### GET `/orders/my`
+Get all orders for the authenticated customer.
+
+**Protected** | `CUSTOMER` only
+
+---
+
+#### GET `/orders/:id`
+Get a single order with full details including rider info.
+
+**Protected** | Customer who placed it, Merchant who owns the restaurant, or assigned Rider
+
+---
+
+#### GET `/orders/restaurant/:restaurantId`
+Get all orders for a specific restaurant.
+
+**Protected** | `MERCHANT` only
+
+**Query Params:**
+| Param | Type | Description |
+|-------|------|-------------|
+| `status` | string | Filter by order status |
+
+---
+
+#### PATCH `/orders/:id/status`
+Update order status (merchant action).
+
+**Protected** | `MERCHANT` only
+
+**Request Body — confirming/preparing:**
+```json
+{
+  "status": "PREPARING",
+  "estimatedPrepTime": 25
+}
+```
+
+**Request Body — cancellation:**
+```json
+{
+  "status": "CANCELLED",
+  "cancelReason": "Item out of stock"
+}
+```
+
+**Allowed statuses for merchant:** `CONFIRMED` → `PREPARING` → `READY_FOR_PICKUP` → `CANCELLED`
+
+**Fields:**
+| Field | Required | Description |
+|-------|----------|-------------|
+| `status` | Yes | New order status |
+| `estimatedPrepTime` | No | Minutes to prepare — set when moving to `PREPARING` |
+| `cancelReason` | **Yes if cancelling** | Reason shown to the customer |
+
+> `CONFIRMED` is set automatically when payment is received via webhook. The merchant's first manual action is typically `PREPARING`.
+
+**Socket events emitted:**
+- `order_status_updated` → to customer tracking the order (includes `estimatedPrepTime` and `cancelReason` when set)
+- `delivery_available` → to all riders (when status is `PREPARING` or `READY_FOR_PICKUP`)
+- `order_cancelled` → to customer's personal room (when merchant cancels, includes reason)
+
+---
+
+#### PATCH `/orders/:id/cancel`
+Cancel an order (customer action).
+
+**Protected** | `CUSTOMER` only
+
+**Notes:**
+- Only works when order status is `PENDING`
+- Socket event `order_cancelled` is emitted to the merchant
+
+---
+
+### Order Status Flow
+
+```
+PENDING           → Order placed, awaiting payment
+CONFIRMED         → Payment received (automatic — set by webhook/verify)
+PREPARING         → Merchant started preparing food (riders get notified)
+READY_FOR_PICKUP  → Food is ready, rider should be arriving
+OUT_FOR_DELIVERY  → Rider picked up the food
+DELIVERED         → Order complete
+CANCELLED         → Cancelled by customer or merchant
+```
+
+---
+
+### 🏍️ RIDER
+
+All rider routes require `RIDER` role.
+
+#### PATCH `/rider/profile`
+Update rider profile.
+
+**Request Body:**
+```json
+{
+  "vehicleType": "bike",
+  "vehiclePlate": "LND 123 XY"
+}
+```
+
+---
+
+#### PATCH `/rider/availability`
+Toggle online/offline status.
+
+**Request Body:**
+```json
+{
+  "isAvailable": true,
+  "latitude": 6.5244,
+  "longitude": 3.3792
+}
+```
+
+---
+
+#### PATCH `/rider/location`
+Update rider's current location. Call this periodically while on a delivery.
+
+**Request Body:**
+```json
+{
+  "latitude": 6.5244,
+  "longitude": 3.3792
+}
+```
+
+**Notes:**
+- Automatically emits `rider_location_updated` to the customer tracking the active order
+
+---
+
+#### GET `/rider/deliveries/available`
+Get all deliveries available for pickup.
+
+**Notes:**
+- Shows orders with status `PREPARING` or `READY_FOR_PICKUP`
+- Shows only unassigned deliveries
+
+---
+
+#### GET `/rider/deliveries/my`
+Get the authenticated rider's delivery history.
+
+---
+
+#### PATCH `/rider/deliveries/:deliveryId/accept`
+Accept a delivery.
+
+**Notes:**
+- Rider must be `isApproved: true`
+- Rider cannot have another active delivery
+- Socket event `rider_assigned` emitted to customer and merchant
+
+---
+
+#### PATCH `/rider/deliveries/:deliveryId/status`
+Update delivery status.
+
+**Request Body:**
+```json
+{
+  "status": "PICKED_UP",
+  "latitude": 6.5244,
+  "longitude": 3.3792
+}
+```
+
+**Allowed statuses:** `PICKED_UP` → `DELIVERED` | `FAILED`
+
+**Socket events emitted:**
+- `delivery_status_updated` → to customer
+- `rider_location_updated` → to customer (if lat/lng provided)
+- `order_delivered` → to customer's personal room (when DELIVERED)
+
+---
+
+### Delivery Status Flow
+
+```
+UNASSIGNED  → Created with order, waiting for a rider
+ASSIGNED    → Rider accepted, heading to restaurant
+PICKED_UP   → Rider collected the food
+DELIVERED   → Delivered to customer
+FAILED      → Delivery failed
+```
+
+---
+
+### 💳 PAYMENTS
+
+#### POST `/payments/initialize/:orderId`
+Initialize a Paystack payment for an order.
+
+**Protected** | `CUSTOMER` only
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Payment initialized",
+  "data": {
+    "paymentUrl": "https://checkout.paystack.com/...",
+    "reference": "CHOPFAST-uuid-timestamp"
+  }
+}
+```
+
+**Notes:**
+- Open `paymentUrl` in a WebView or browser
+- Amount is in Naira (converted to kobo internally)
+- Reference is saved on the order
+
+---
+
+#### GET `/payments/verify/:reference`
+Manually verify a payment by reference.
+
+**Protected** | `CUSTOMER` only
+
+---
+
+#### POST `/payments/webhook`
+Paystack webhook endpoint.
+
+**Public** | Called by Paystack servers only
+
+**Notes:**
+- Validates Paystack signature via HMAC SHA-512
+- On `charge.success`: sets `paymentStatus` → `PAID` and `status` → `CONFIRMED`
+- Emits `order_confirmed` to the merchant's restaurant room
+- Emits `order_status_updated` to the customer tracking the order
+- Always returns `200` to Paystack
+- Set this URL in your Paystack dashboard → Settings → Webhooks
+
+---
+
+### Paystack Test Cards
+
+| Card Number | Expiry | CVV | OTP |
+|-------------|--------|-----|-----|
+| 4084 0840 8408 4081 | Any future date | 408 | 123456 |
+
+---
+
+### ⭐ REVIEWS
+
+#### POST `/reviews`
+Submit a review after a delivered order.
+
+**Protected** | `CUSTOMER` only
+
+**Request Body:**
+```json
+{
+  "orderId": "uuid",
+  "restaurantRating": 5,
+  "riderRating": 4,
+  "comment": "Jollof was fire, rider was fast!"
+}
+```
+
+**Notes:**
+- Order must have status `DELIVERED`
+- One review per order
+- `riderRating` is optional
+- Restaurant and rider average ratings are automatically recalculated
+
+---
+
+#### GET `/reviews/restaurant/:restaurantId`
+Get all reviews for a restaurant.
+
+**Public** | No token required
+
+---
+
+#### GET `/reviews/my`
+Get all reviews for the authenticated rider.
+
+**Protected** | `RIDER` only
+
+---
+
+### 🏦 BANK ACCOUNT
+
+All bank account routes require `MERCHANT` role.
+
+#### GET `/bank-account/banks`
+Fetch the list of all Nigerian banks from Paystack.
+
+**Protected** | `MERCHANT` only
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Banks fetched",
+  "data": {
+    "banks": [
+      { "name": "Zenith Bank", "code": "057" },
+      { "name": "GTBank", "code": "058" }
+    ]
+  }
+}
+```
+
+> Cache this list on the frontend — it changes rarely.
+
+---
+
+#### POST `/bank-account/verify`
+Verify an account number before saving. Returns the account name so the merchant can confirm it's correct.
+
+**Protected** | `MERCHANT` only
+
+**Request Body:**
+```json
+{
+  "accountNumber": "0123456789",
+  "bankCode": "058"
+}
+```
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Account verified",
+  "data": {
+    "accountName": "JABULANI DOE",
+    "accountNumber": "0123456789"
+  }
+}
+```
+
+---
+
+#### POST `/bank-account`
+Save a bank account. Also creates a Paystack Transfer Recipient required for payouts.
+
+**Protected** | `MERCHANT` only
+
+**Request Body:**
+```json
+{
+  "accountName": "JABULANI DOE",
+  "accountNumber": "0123456789",
+  "bankName": "GTBank",
+  "bankCode": "058"
+}
+```
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Bank account saved successfully",
+  "data": {
+    "bankAccount": {
+      "id": "uuid",
+      "merchantId": "uuid",
+      "accountName": "JABULANI DOE",
+      "accountNumber": "0123456789",
+      "bankName": "GTBank",
+      "bankCode": "058",
+      "recipientCode": "RCP_xxxxxx",
+      "isVerified": true
+    }
+  }
+}
+```
+
+**Notes:**
+- Calling this again updates the existing account (upsert)
+- `recipientCode` is the Paystack Transfer Recipient code — required for payouts
+
+---
+
+#### GET `/bank-account`
+Get the merchant's saved bank account.
+
+**Protected** | `MERCHANT` only
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Bank account fetched",
+  "data": {
+    "bankAccount": { ...bank account object } // null if none saved
+  }
+}
+```
+
+---
+
+### 💰 PAYOUTS
+
+All payout routes require `MERCHANT` role.
+
+#### GET `/payouts/earnings`
+Get the merchant's earnings summary across all their restaurants.
+
+**Protected** | `MERCHANT` only
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Earnings fetched",
+  "data": {
+    "balance": {
+      "available": 45000,
+      "totalEarned": 50000,
+      "totalPaidOut": 5000
+    },
+    "today": {
+      "earnings": 9000,
+      "orders": 4
+    },
+    "thisWeek": {
+      "earnings": 27000,
+      "orders": 12
+    },
+    "thisMonth": {
+      "earnings": 45000,
+      "orders": 20
+    },
+    "commissionRate": 0.9
+  }
+}
+```
+
+**Notes:**
+- `available` = total earned minus completed payouts
+- All amounts are in Naira
+- Earnings are calculated as `subtotal × 0.90` — delivery fee and service charge are excluded (those go to riders and the platform)
+
+---
+
+#### GET `/payouts/transactions`
+Get per-order transaction history showing what the merchant earned on each order.
+
+**Protected** | `MERCHANT` only
+
+**Query Params:**
+| Param | Default | Description |
+|-------|---------|-------------|
+| `page` | 1 | Page number |
+| `limit` | 20 | Items per page |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Transactions fetched",
+  "data": {
+    "transactions": [
+      {
+        "id": "uuid",
+        "subtotal": 5000,
+        "total": 6700,
+        "serviceCharge": 200,
+        "status": "DELIVERED",
+        "merchantEarning": 4500,
+        "platformFee": 700,
+        "createdAt": "2026-03-10T14:00:00.000Z",
+        "restaurant": { "name": "Mama Emeka Kitchen" },
+        "user": { "firstName": "Jabulani", "lastName": "Doe" },
+        "items": [ ...order items ]
+      }
+    ],
+    "pagination": {
+      "total": 40,
+      "page": 1,
+      "limit": 20,
+      "pages": 2
+    }
+  }
+}
+```
+
+> `platformFee` = 10% of subtotal + service charge (₦200). `merchantEarning` = 90% of subtotal.
+
+---
+
+#### POST `/payouts/request`
+Request a payout to the merchant's registered bank account via Paystack Transfer.
+
+**Protected** | `MERCHANT` only
+
+**Request Body:**
+```json
+{
+  "amount": 20000
+}
+```
+
+**Response `201`:**
+```json
+{
+  "success": true,
+  "message": "Payout request submitted",
+  "data": {
+    "payout": {
+      "id": "uuid",
+      "merchantId": "uuid",
+      "amount": 20000,
+      "status": "PROCESSING",
+      "reference": "PAYOUT-merchantId-timestamp",
+      "narration": "Payout to JABULANI DOE",
+      "requestedAt": "2026-03-10T14:00:00.000Z"
+    },
+    "bankAccount": {
+      "accountName": "JABULANI DOE",
+      "bankName": "GTBank",
+      "accountNumber": "****6789"
+    }
+  }
+}
+```
+
+**Validation:**
+- Merchant must have a verified bank account with a `recipientCode`
+- `amount` must be ≥ ₦1,000
+- `amount` must not exceed available balance
+- Cannot request a new payout while one is `PENDING` or `PROCESSING`
+
+**Notes:**
+- Paystack Transfers must be enabled on your Paystack dashboard (Settings → Preferences → Transfers)
+- Status will be `PROCESSING` initially; Paystack sends a webhook when it completes
+
+---
+
+#### GET `/payouts/history`
+Get all past payout requests for the merchant.
+
+**Protected** | `MERCHANT` only
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Payout history fetched",
+  "data": {
+    "payouts": [
+      {
+        "id": "uuid",
+        "amount": 20000,
+        "status": "COMPLETED",
+        "reference": "PAYOUT-...",
+        "narration": "Payout to JABULANI DOE",
+        "requestedAt": "2026-03-10T14:00:00.000Z",
+        "processedAt": "2026-03-10T14:05:00.000Z"
+      }
+    ]
+  }
+}
+```
+
+**Payout statuses:** `PENDING` → `PROCESSING` → `COMPLETED` | `FAILED`
+
+---
+
+### 📊 ANALYTICS
+
+All analytics routes require `MERCHANT` role.
+
+#### GET `/analytics/:restaurantId/overview`
+Get key stats for a restaurant over a time period.
+
+**Protected** | `MERCHANT` only
+
+**Query Params:**
+| Param | Default | Options |
+|-------|---------|---------|
+| `period` | `7d` | `1d`, `7d`, `30d` |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Stats fetched",
+  "data": {
+    "period": "7d",
+    "totalOrders": 42,
+    "deliveredOrders": 38,
+    "cancelledOrders": 2,
+    "completionRate": 90,
+    "revenue": 95000,
+    "avgOrderValue": 2500
+  }
+}
+```
+
+---
+
+#### GET `/analytics/:restaurantId/revenue`
+Get daily revenue data for charting.
+
+**Protected** | `MERCHANT` only
+
+**Query Params:**
+| Param | Default | Description |
+|-------|---------|-------------|
+| `days` | `7` | Number of past days to include |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Revenue chart fetched",
+  "data": {
+    "chartData": [
+      {
+        "date": "2026-03-04",
+        "label": "Tue 4",
+        "revenue": 12500,
+        "orders": 5
+      },
+      {
+        "date": "2026-03-05",
+        "label": "Wed 5",
+        "revenue": 18000,
+        "orders": 7
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### GET `/analytics/:restaurantId/best-sellers`
+Get the top selling menu items.
+
+**Protected** | `MERCHANT` only
+
+**Query Params:**
+| Param | Default | Description |
+|-------|---------|-------------|
+| `limit` | `10` | Number of items to return |
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Best sellers fetched",
+  "data": {
+    "bestSellers": [
+      {
+        "menuItemId": "uuid",
+        "name": "Jollof Rice + Chicken",
+        "imageUrl": "https://res.cloudinary.com/...",
+        "price": 2500,
+        "totalQuantitySold": 84,
+        "totalRevenue": 210000,
+        "orderCount": 60
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### GET `/analytics/:restaurantId/peak-hours`
+Get order volume by hour of day (based on last 30 days). Use this to draw a bar chart of the busiest times.
+
+**Protected** | `MERCHANT` only
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Peak hours fetched",
+  "data": {
+    "peakHours": [
+      { "hour": 0, "label": "00:00", "orders": 0 },
+      { "hour": 12, "label": "12:00", "orders": 18 },
+      { "hour": 13, "label": "13:00", "orders": 25 }
+    ],
+    "peakHour": "13:00"
+  }
+}
+```
+
+---
+
+### 🛠️ ADMIN
+
+All admin routes require `ADMIN` role.
+
+#### GET `/admin/dashboard`
+Get platform-wide statistics.
+
+**Response `200`:**
+```json
+{
+  "success": true,
+  "message": "Dashboard stats fetched",
+  "data": {
+    "users": {
+      "customers": 150,
+      "merchants": 12,
+      "riders": 30
+    },
+    "restaurants": 18,
+    "orders": {
+      "total": 420,
+      "delivered": 380
+    },
+    "revenue": 4200000,
+    "pendingApprovals": {
+      "merchants": 3,
+      "riders": 5
+    }
+  }
+}
+```
+
+---
+
+#### GET `/admin/users`
+Get all users with pagination and search.
+
+**Query Params:**
+| Param | Default | Description |
+|-------|---------|-------------|
+| `role` | - | Filter by role |
+| `search` | - | Search by name, email, phone |
+| `page` | 1 | Page number |
+| `limit` | 20 | Items per page |
+
+---
+
+#### PATCH `/admin/users/:id/toggle`
+Activate or deactivate a user account.
+
+---
+
+#### GET `/admin/merchants/pending`
+Get all merchants pending approval.
+
+---
+
+#### PATCH `/admin/merchants/:id/approve`
+Approve or reject a merchant.
+
+**Request Body:**
+```json
+{
+  "approve": true
+}
+```
+
+**Notes:**
+- When approved, all the merchant's restaurants are also approved automatically
+
+---
+
+#### GET `/admin/riders/pending`
+Get all riders pending approval.
+
+---
+
+#### PATCH `/admin/riders/:id/approve`
+Approve or reject a rider.
+
+**Request Body:**
+```json
+{
+  "approve": true
+}
+```
+
+---
+
+#### GET `/admin/orders`
+Get all orders on the platform with pagination.
+
+**Query Params:**
+| Param | Description |
+|-------|-------------|
+| `status` | Filter by order status |
+| `page` | Page number |
+| `limit` | Items per page |
+
+---
+
+## 🔌 Socket.io Real-Time Events
+
+### Connection
+
+```js
+import { io } from 'socket.io-client';
+
+const socket = io('http://localhost:8000');
+```
+
+### Joining Rooms
+
+Each app must join the appropriate room after login:
+
+```js
+// Customer app
+socket.emit('join_customer_room', userId);
+socket.emit('track_order', orderId); // when viewing an order
+
+// Merchant app
+socket.emit('join_merchant_room', restaurantId);
+
+// Rider app
+socket.emit('join_rider_room', riderId);
+
+// Customer browsing a restaurant page (to receive busy mode updates)
+socket.emit('join_restaurant_customers', restaurantId);
+```
+
+---
+
+### Events Reference
+
+#### Events the SERVER emits to CLIENT
+
+| Event | Room | Payload | Description |
+|-------|------|---------|-------------|
+| `new_order` | `restaurant_{id}` | `{ orderId, total, itemCount, preview, createdAt }` | New order placed |
+| `order_confirmed` | `restaurant_{id}` | `{ orderId, message }` | Payment received, order auto-confirmed |
+| `order_status_updated` | `order_{id}` | `{ orderId, status, estimatedPrepTime, cancelReason, updatedAt }` | Order status changed |
+| `order_cancelled` | `customer_{id}` or `restaurant_{id}` | `{ orderId, reason, message }` | Order was cancelled |
+| `rider_assigned` | `order_{id}` | `{ orderId, message }` | Rider accepted the delivery |
+| `delivery_available` | broadcast | `{ orderId, status, restaurantName }` | Order ready for rider pickup |
+| `delivery_status_updated` | `order_{id}` | `{ orderId, deliveryStatus, updatedAt }` | Rider updated delivery status |
+| `rider_location_updated` | `order_{id}` | `{ orderId, latitude, longitude }` | Rider location changed |
+| `order_delivered` | `customer_{id}` | `{ orderId, message }` | Order successfully delivered |
+| `restaurant_busy_updated` | `restaurant_customers_{id}` | `{ restaurantId, isBusy, busyMessage }` | Restaurant busy mode toggled |
+
+#### Events the CLIENT emits to SERVER
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `join_customer_room` | `userId` | Customer joins personal room |
+| `join_merchant_room` | `restaurantId` | Merchant joins restaurant room |
+| `join_rider_room` | `riderId` | Rider joins personal room |
+| `track_order` | `orderId` | Join specific order room for live updates |
+| `join_restaurant_customers` | `restaurantId` | Join restaurant browsing room (busy mode updates) |
+
+---
+
+## 🗂️ Data Models Reference
+
+### User
+```
+id, email, phone, firstName, lastName, role, isVerified, isActive, createdAt, updatedAt
+```
+
+### Restaurant
+```
+id, merchantId, name, description, address, city, state, latitude, longitude,
+logoUrl, coverUrl, isOpen, isApproved, openingTime, closingTime, rating, totalReviews,
+isBusy, busyMessage, avgPrepTime, createdAt, updatedAt
+```
+
+### MenuItem
+```
+id, restaurantId, categoryId, name, description, price, imageUrl, isAvailable
+```
+
+### Order
+```
+id, userId, restaurantId, addressId, status, paymentStatus, paymentRef,
+subtotal, deliveryFee, serviceCharge, total, note,
+estimatedPrepTime, cancelReason, cancelledBy,
+createdAt, updatedAt
+```
+
+### Delivery
+```
+id, orderId, riderId, status, pickedUpAt, deliveredAt, createdAt, updatedAt
+```
+
+### Rider
+```
+id, userId, vehicleType, vehiclePlate, isAvailable, isApproved,
+currentLatitude, currentLongitude, rating, totalReviews
+```
+
+### MerchantBankAccount
+```
+id, merchantId, accountName, accountNumber, bankName, bankCode,
+recipientCode, isVerified, createdAt, updatedAt
+```
+
+### PayoutRequest
+```
+id, merchantId, amount, status (PENDING | PROCESSING | COMPLETED | FAILED),
+reference, narration, failureReason, requestedAt, processedAt
+```
+
+---
+
+## Environment Variables
+
+```env
+PORT=8000
+NODE_ENV=development
+DATABASE_URL=postgresql://postgres:password@localhost:5432/lanieats_db
+JWT_SECRET=your_super_secret_key
+JWT_EXPIRES_IN=7d
+BCRYPT_ROUNDS=12
+PAYSTACK_SECRET_KEY=sk_test_xxxxxxxxxxxxxxxx
+GOOGLE_MAPS_API_KEY=your_google_maps_api_key
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+
+# Platform commission
+MERCHANT_COMMISSION_RATE=0.90
 ```

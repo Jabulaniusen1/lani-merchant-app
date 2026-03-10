@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, RefreshControl, StyleSheet,
+  View, Text, ScrollView, TouchableOpacity, RefreshControl,
+  Modal, TextInput, StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,11 +16,18 @@ import { colors } from '../../theme/colors';
 import { shadows } from '../../theme/shadows';
 import type { Restaurant } from '../../types';
 
+const BUSY_QUICK_MESSAGES = ['Very busy right now', 'Long wait time', 'Almost full capacity'];
+
 export default function RestaurantScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { restaurants, isLoading, fetchRestaurants, toggleOpen } = useRestaurantStore();
+  const { restaurants, isLoading, fetchRestaurants, toggleOpen, toggleBusyMode } = useRestaurantStore();
   const [refreshing, setRefreshing] = useState<boolean>(false);
+
+  // Busy mode sheet state
+  const [busySheetRestaurant, setBusySheetRestaurant] = useState<Restaurant | null>(null);
+  const [busyMessage, setBusyMessage] = useState('');
+  const [togglingBusy, setTogglingBusy] = useState(false);
 
   useEffect(() => {
     fetchRestaurants();
@@ -37,6 +45,35 @@ export default function RestaurantScreen(): React.JSX.Element {
       await toggleOpen(restaurant.id, !restaurant.isOpen);
     } catch {
       showToast({ type: 'error', message: 'Failed to update restaurant status' });
+    }
+  };
+
+  const handleBusyToggle = (restaurant: Restaurant): void => {
+    if (restaurant.isBusy) {
+      // Disable immediately
+      setTogglingBusy(true);
+      toggleBusyMode(restaurant.id, false)
+        .then(() => showToast({ type: 'success', message: 'Busy mode disabled' }))
+        .catch(() => showToast({ type: 'error', message: 'Failed to update busy mode' }))
+        .finally(() => setTogglingBusy(false));
+    } else {
+      // Show sheet to set message
+      setBusyMessage('');
+      setBusySheetRestaurant(restaurant);
+    }
+  };
+
+  const handleEnableBusy = async (): Promise<void> => {
+    if (!busySheetRestaurant) return;
+    setTogglingBusy(true);
+    try {
+      await toggleBusyMode(busySheetRestaurant.id, true, busyMessage || undefined);
+      showToast({ type: 'warning', message: 'Busy mode enabled' });
+      setBusySheetRestaurant(null);
+    } catch {
+      showToast({ type: 'error', message: 'Failed to enable busy mode' });
+    } finally {
+      setTogglingBusy(false);
     }
   };
 
@@ -93,6 +130,29 @@ export default function RestaurantScreen(): React.JSX.Element {
                   onToggleOpen={handleToggleOpen}
                 />
 
+                {/* Busy Mode Row */}
+                <View style={[styles.busyRow, shadows.sm as object]}>
+                  <View style={styles.busyLeft}>
+                    <Ionicons name="hourglass-outline" size={18} color={item.isBusy ? colors.error : colors.muted} />
+                    <View>
+                      <Text style={styles.busyLabel}>Busy Mode</Text>
+                      {item.isBusy && item.busyMessage ? (
+                        <Text style={styles.busyMessageText} numberOfLines={1}>{item.busyMessage}</Text>
+                      ) : null}
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.busyToggle, item.isBusy ? styles.busyToggleOn : styles.busyToggleOff]}
+                    onPress={() => handleBusyToggle(item)}
+                    disabled={togglingBusy}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.busyToggleText, item.isBusy ? styles.busyToggleTextOn : styles.busyToggleTextOff]}>
+                      {item.isBusy ? 'ON' : 'OFF'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
                 <View style={styles.restaurantActions}>
                   <Button
                     label="Edit Restaurant"
@@ -123,6 +183,71 @@ export default function RestaurantScreen(): React.JSX.Element {
       >
         <Ionicons name="add" size={28} color="#fff" />
       </TouchableOpacity>
+
+      {/* Busy Mode Sheet */}
+      <Modal
+        visible={!!busySheetRestaurant}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setBusySheetRestaurant(null)}
+      >
+        <TouchableOpacity
+          style={styles.overlay}
+          activeOpacity={1}
+          onPress={() => setBusySheetRestaurant(null)}
+        >
+          <View style={styles.sheet} onStartShouldSetResponder={() => true}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Enable Busy Mode</Text>
+            <View style={styles.sheetDivider} />
+
+            <Text style={styles.sheetLabel}>Let customers know why:</Text>
+            <TextInput
+              style={styles.messageInput}
+              value={busyMessage}
+              onChangeText={setBusyMessage}
+              placeholder="Very busy right now, 45min wait..."
+              placeholderTextColor={colors.muted}
+              multiline
+              numberOfLines={2}
+            />
+
+            <Text style={styles.quickLabel}>Quick options:</Text>
+            <View style={styles.quickRow}>
+              {BUSY_QUICK_MESSAGES.map((msg) => (
+                <TouchableOpacity
+                  key={msg}
+                  style={[styles.quickPill, busyMessage === msg && styles.quickPillActive]}
+                  onPress={() => setBusyMessage(msg)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.quickPillText, busyMessage === msg && styles.quickPillTextActive]}>
+                    {msg}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.sheetActions}>
+              <Button
+                label="Cancel"
+                variant="outline"
+                size="sm"
+                onPress={() => setBusySheetRestaurant(null)}
+                style={{ flex: 1 }}
+              />
+              <Button
+                label="Enable Busy Mode"
+                variant="primary"
+                size="sm"
+                onPress={handleEnableBusy}
+                loading={togglingBusy}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -165,6 +290,26 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   infoText: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: colors.muted, flex: 1 },
+  busyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 10,
+  },
+  busyLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  busyLabel: { fontFamily: 'DMSans_600SemiBold', fontSize: 14, color: colors.navy },
+  busyMessageText: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: colors.muted, marginTop: 2, maxWidth: 200 },
+  busyToggle: {
+    paddingHorizontal: 16, paddingVertical: 7, borderRadius: 999,
+  },
+  busyToggleOn: { backgroundColor: '#FEE2E2' },
+  busyToggleOff: { backgroundColor: colors.lightGray },
+  busyToggleText: { fontFamily: 'Sora_700Bold', fontSize: 12 },
+  busyToggleTextOn: { color: colors.error },
+  busyToggleTextOff: { color: colors.muted },
   restaurantActions: {
     flexDirection: 'row',
     gap: 10,
@@ -182,4 +327,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 36,
+  },
+  sheetHandle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: colors.lightGray, alignSelf: 'center', marginBottom: 16,
+  },
+  sheetTitle: { fontFamily: 'Sora_700Bold', fontSize: 18, color: colors.navy, marginBottom: 12 },
+  sheetDivider: { height: 1, backgroundColor: colors.lightGray, marginBottom: 16 },
+  sheetLabel: { fontFamily: 'DMSans_500Medium', fontSize: 14, color: '#374151', marginBottom: 8 },
+  messageInput: {
+    borderWidth: 1.5, borderColor: colors.lightGray, borderRadius: 12,
+    padding: 12, fontFamily: 'DMSans_400Regular', fontSize: 14, color: colors.navy,
+    textAlignVertical: 'top', minHeight: 64, marginBottom: 16,
+  },
+  quickLabel: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: colors.muted, marginBottom: 8 },
+  quickRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
+  quickPill: {
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+    borderWidth: 1.5, borderColor: colors.lightGray,
+  },
+  quickPillActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  quickPillText: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: colors.muted },
+  quickPillTextActive: { color: '#fff' },
+  sheetActions: { flexDirection: 'row', gap: 10 },
 });

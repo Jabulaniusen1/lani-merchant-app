@@ -15,7 +15,7 @@ interface OrderState {
   fetchOrders: (restaurantId: string, status?: OrderStatus | null) => Promise<void>;
   setFilter: (filter: FilterTab) => void;
   addOrder: (order: Order) => void;
-  updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
+  updateOrderStatus: (orderId: string, status: OrderStatus, extra?: { cancelReason?: string; estimatedPrepTime?: number }) => Promise<void>;
   updateOrderInList: (orderId: string, data: Partial<Order>) => void;
   removeOrder: (orderId: string) => void;
   clearNewOrderCount: () => void;
@@ -58,8 +58,8 @@ const useOrderStore = create<OrderState>((set) => ({
     });
   },
 
-  updateOrderStatus: async (orderId: string, status: OrderStatus): Promise<void> => {
-    await updateOrderStatusApi(orderId, status);
+  updateOrderStatus: async (orderId: string, status: OrderStatus, extra?: { cancelReason?: string; estimatedPrepTime?: number }): Promise<void> => {
+    await updateOrderStatusApi(orderId, status, extra);
     set((state) => {
       const orders = state.orders.map((o) =>
         o.id === orderId ? { ...o, status } : o

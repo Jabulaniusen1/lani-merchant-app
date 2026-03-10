@@ -17,6 +17,7 @@ export const getOrderDetailApi = (
 
 export const updateOrderStatusApi = (
   orderId: string,
-  status: OrderStatus
+  status: OrderStatus,
+  extra?: { cancelReason?: string; estimatedPrepTime?: number }
 ): Promise<AxiosResponse<ApiResponse<{ order: Order }>>> =>
-  client.patch(`/orders/${orderId}/status`, { status });
+  client.patch(`/orders/${orderId}/status`, { status, ...extra });

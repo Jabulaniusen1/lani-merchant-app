@@ -23,7 +23,7 @@ export default function OrdersScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { orders, isLoading, activeFilter, fetchOrders, setFilter, addOrder, updateOrderInList, updateOrderStatus } = useOrderStore();
-  const { activeRestaurant, toggleOpen, fetchRestaurants } = useRestaurantStore();
+  const { activeRestaurant, toggleOpen, toggleBusyMode, fetchRestaurants } = useRestaurantStore();
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [togglingOpen, setTogglingOpen] = useState<boolean>(false);
   const newOrderIds = useRef<Set<string>>(new Set());
@@ -108,18 +108,32 @@ export default function OrdersScreen(): React.JSX.Element {
     }
   };
 
-  const handleUpdateStatus = async (orderId: string, status: OrderStatus): Promise<void> => {
+  const handleDisableBusyMode = async (): Promise<void> => {
+    if (!activeRestaurant) return;
     try {
-      await updateOrderStatus(orderId, status);
+      await toggleBusyMode(activeRestaurant.id, false);
+      showToast({ type: 'success', message: 'Busy mode disabled' });
+    } catch {
+      showToast({ type: 'error', message: 'Failed to disable busy mode' });
+    }
+  };
+
+  const handleUpdateStatus = async (
+    orderId: string,
+    status: OrderStatus,
+    extra?: { cancelReason?: string; estimatedPrepTime?: number }
+  ): Promise<void> => {
+    try {
+      await updateOrderStatus(orderId, status, extra);
       showToast({ type: 'success', message: 'Order status updated' });
     } catch {
       showToast({ type: 'error', message: 'Failed to update order status' });
     }
   };
 
-  const handleCancel = async (orderId: string): Promise<void> => {
+  const handleCancel = async (orderId: string, cancelReason: string): Promise<void> => {
     try {
-      await updateOrderStatus(orderId, 'CANCELLED');
+      await updateOrderStatus(orderId, 'CANCELLED', { cancelReason });
       showToast({ type: 'warning', message: 'Order cancelled' });
     } catch {
       showToast({ type: 'error', message: 'Failed to cancel order' });
@@ -155,6 +169,21 @@ export default function OrdersScreen(): React.JSX.Element {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Busy Mode Banner */}
+      {activeRestaurant?.isBusy && (
+        <TouchableOpacity
+          style={styles.busyBanner}
+          onPress={handleDisableBusyMode}
+          activeOpacity={0.85}
+        >
+          <View style={styles.busyBannerLeft}>
+            <View style={styles.busyDot} />
+            <Text style={styles.busyBannerText}>BUSY MODE ON — New orders are paused</Text>
+          </View>
+          <Text style={styles.busyBannerTap}>Tap to disable</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Closed banner */}
       {activeRestaurant && !activeRestaurant.isOpen && (
@@ -257,6 +286,18 @@ const styles = StyleSheet.create({
   dotOpen: { backgroundColor: colors.success },
   dotClosed: { backgroundColor: colors.error },
   toggleText: { fontFamily: 'Sora_700Bold', fontSize: 12 },
+  busyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1F2937',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  busyBannerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  busyDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.error },
+  busyBannerText: { fontFamily: 'DMSans_600SemiBold', fontSize: 13, color: '#fff' },
+  busyBannerTap: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: 'rgba(255,255,255,0.6)' },
   closedBanner: {
     flexDirection: 'row',
     alignItems: 'center',

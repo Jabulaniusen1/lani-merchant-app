@@ -8,7 +8,7 @@ interface SkeletonBoxProps {
   style?: ViewStyle;
 }
 
-function SkeletonBox({ width, height, borderRadius = 8, style }: SkeletonBoxProps): React.JSX.Element {
+export function SkeletonBox({ width, height, borderRadius = 8, style }: SkeletonBoxProps): React.JSX.Element {
   const shimmer = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
