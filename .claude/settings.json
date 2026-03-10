@@ -3,7 +3,14 @@
     "allow": [
       "Bash(npx expo:*)",
       "Bash(node -e \"const fonts = require\\(''''@expo-google-fonts/dm-sans''''\\); console.log\\(Object.keys\\(fonts\\).filter\\(k => k.startsWith\\(''''DMSans''''\\)\\).join\\(''''\\\\n''''\\)\\)\")",
-      "Bash(node -e \"const fonts = require\\(''''@expo-google-fonts/dm-sans''''\\); console.log\\(Object.keys\\(fonts\\).slice\\(0, 5\\)\\)\")"
+      "Bash(node -e \"const fonts = require\\(''''@expo-google-fonts/dm-sans''''\\); console.log\\(Object.keys\\(fonts\\).slice\\(0, 5\\)\\)\")",
+      "Bash('BASE=/Users/mac/Desktop/lanieats code:*)",
+      "Bash(/dev/null __NEW_LINE_87ce7ad04ab00aa1__ echo echo '=== Remaining .js files in app/ ===' find $BASE/app -name *.js -not -path */node_modules/* 2)",
+      "Bash(/dev/null __NEW_LINE_87ce7ad04ab00aa1__ echo echo '=== .ts/.tsx files in src/ ===' find $BASE/src -name *.ts -o -name *.tsx)",
+      "Read(//Users/mac/Desktop/lanieats code base/lani-merchants-app/.claude/worktrees/agent-a7f68cb4/=== .ts/.tsx files in app/**)",
+      "Bash(__NEW_LINE_27fef0ce5eaeb38d__ echo:*)",
+      "Read(//Users/mac/Desktop/lanieats code base/lani-merchants-app/.claude/worktrees/agent-a7f68cb4/$BASE/**)",
+      "Read(//Users/mac/Desktop/lanieats code base/lani-merchants-app/.claude/worktrees/agent-a7f68cb4/**)"
     ]
   }
 }
