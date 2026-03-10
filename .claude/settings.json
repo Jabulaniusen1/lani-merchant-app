@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx expo:*)",
+      "Bash(node -e \"const fonts = require\\(''''@expo-google-fonts/dm-sans''''\\); console.log\\(Object.keys\\(fonts\\).filter\\(k => k.startsWith\\(''''DMSans''''\\)\\).join\\(''''\\\\n''''\\)\\)\")",
+      "Bash(node -e \"const fonts = require\\(''''@expo-google-fonts/dm-sans''''\\); console.log\\(Object.keys\\(fonts\\).slice\\(0, 5\\)\\)\")"
+    ]
+  }
+}

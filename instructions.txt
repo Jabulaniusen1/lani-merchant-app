@@ -1,0 +1,1088 @@
+# Lanieats Merchant App — Claude code Build Prompt
+
+---
+
+## PROJECT OVERVIEW
+
+Build the **Lanieats Merchant App** — a React Native mobile application for restaurant owners and food vendors to manage their restaurants, menus, and incoming orders on the Lanieats food delivery platform in Nigeria.
+
+This is a **production-ready** app. Build everything fully functional, fully connected to the API, and with a polished, professional UI.
+
+---
+
+## TECH STACK
+
+```
+Framework:        React Native
+Navigation:       React Navigation v6 (Stack + Bottom Tabs)
+State Management: Zustand
+API Client:       Axios
+Storage:          AsyncStorage
+Real-time:        Socket.io-client
+Forms:            React Hook Form
+UI Components:    Custom (no UI libraries — build everything from scratch)
+Icons:            @expo/vector-icons (Ionicons)
+Image Upload:     expo-image-picker + Cloudinary
+Notifications:    expo-notifications
+```
+
+Install all required packages before starting.
+
+---
+
+## DESIGN SYSTEM
+
+### Brand Identity
+- **App Name:** Lanieats for Merchants
+- **Personality:** Professional, efficient, trustworthy — built for busy Nigerian restaurant owners
+- **Aesthetic:** Clean and modern with warm Nigerian energy. Think premium fintech meets food culture.
+
+### Color Palette
+```
+Primary Orange:     #FF6B00   (main CTA, active states, badges)
+Dark Navy:          #0D1B2A   (headers, primary text, tab bar background)
+Soft White:         #F8F9FA   (page backgrounds)
+Card White:         #FFFFFF   (card backgrounds)
+Success Green:      #22C55E   (delivered, approved, online)
+Warning Amber:      #F59E0B   (preparing, pending)
+Error Red:          #EF4444   (cancelled, rejected, offline)
+Muted Gray:        #9CA3AF   (secondary text, borders, disabled)
+Light Gray:         #F3F4F6   (input backgrounds, dividers)
+```
+
+### Typography
+```
+Display / Headers:   Sora (Google Font)
+Body / UI:           DM Sans (Google Font)
+Numbers / Stats:     Sora Bold
+```
+
+Load via expo-google-fonts:
+```bash
+npx expo install @expo-google-fonts/sora @expo-google-fonts/dm-sans expo-font
+```
+
+### Spacing System
+```
+xs:   4px
+sm:   8px
+md:   16px
+lg:   24px
+xl:   32px
+2xl:  48px
+```
+
+### Border Radius
+```
+sm:   8px
+md:   12px
+lg:   16px
+xl:   24px
+full: 9999px
+```
+
+### Shadows (iOS + Android)
+```js
+const shadow = {
+  sm: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  md: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  lg: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+};
+```
+
+---
+
+## PROJECT STRUCTURE
+
+```
+lanieats-merchant/
+├── app/                        ← Expo Router or standard App.js
+├── src/
+│   ├── api/
+│   │   ├── client.js           ← Axios instance
+│   │   ├── auth.api.js
+│   │   ├── restaurant.api.js
+│   │   ├── menu.api.js
+│   │   ├── order.api.js
+│   │   └── upload.api.js
+│   ├── services/
+│   │   └── socket.js           ← Socket.io instance
+│   ├── store/
+│   │   ├── auth.store.js       ← Zustand auth store
+│   │   ├── order.store.js      ← Zustand order store
+│   │   └── restaurant.store.js ← Zustand restaurant store
+│   ├── navigation/
+│   │   ├── AppNavigator.js
+│   │   ├── AuthNavigator.js
+│   │   └── MainNavigator.js
+│   ├── screens/
+│   │   ├── auth/
+│   │   │   ├── SplashScreen.js
+│   │   │   ├── OnboardingScreen.js
+│   │   │   ├── LoginScreen.js
+│   │   │   └── RegisterScreen.js
+│   │   ├── orders/
+│   │   │   ├── OrdersScreen.js
+│   │   │   └── OrderDetailScreen.js
+│   │   ├── restaurant/
+│   │   │   ├── RestaurantScreen.js
+│   │   │   ├── EditRestaurantScreen.js
+│   │   │   └── CreateRestaurantScreen.js
+│   │   ├── menu/
+│   │   │   ├── MenuScreen.js
+│   │   │   ├── AddMenuItemScreen.js
+│   │   │   └── EditMenuItemScreen.js
+│   │   └── profile/
+│   │       └── ProfileScreen.js
+│   ├── components/
+│   │   ├── common/
+│   │   │   ├── Button.js
+│   │   │   ├── Input.js
+│   │   │   ├── Card.js
+│   │   │   ├── Badge.js
+│   │   │   ├── Avatar.js
+│   │   │   ├── EmptyState.js
+│   │   │   ├── LoadingSpinner.js
+│   │   │   ├── SkeletonLoader.js
+│   │   │   └── Toast.js
+│   │   ├── orders/
+│   │   │   ├── OrderCard.js
+│   │   │   └── OrderStatusStepper.js
+│   │   ├── menu/
+│   │   │   ├── MenuItemCard.js
+│   │   │   └── CategorySection.js
+│   │   └── restaurant/
+│   │       └── RestaurantHeader.js
+│   ├── hooks/
+│   │   ├── useAuth.js
+│   │   ├── useOrders.js
+│   │   └── useSocket.js
+│   ├── utils/
+│   │   ├── storage.js
+│   │   ├── formatters.js       ← currency, date, phone formatters
+│   │   └── constants.js
+│   └── theme/
+│       ├── colors.js
+│       ├── typography.js
+│       ├── spacing.js
+│       └── shadows.js
+```
+
+---
+
+## API SETUP
+
+### Base URL
+```
+http://localhost:8000/api/v1
+```
+
+### `src/api/client.js`
+```js
+import axios from 'axios';
+import { getToken, clearAuth } from '../utils/storage';
+
+const BASE_URL = 'http://localhost:8000/api/v1';
+
+const client = axios.create({
+  baseURL: BASE_URL,
+  timeout: 15000,
+  headers: { 'Content-Type': 'application/json' },
+});
+
+client.interceptors.request.use(async (config) => {
+  const token = await getToken();
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+client.interceptors.response.use(
+  (res) => res,
+  async (error) => {
+    if (error.response?.status === 401) {
+      await clearAuth();
+      // Trigger navigation to login from your auth store
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default client;
+```
+
+### `src/utils/storage.js`
+```js
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+export const saveAuth = async (token, user) => {
+  await AsyncStorage.multiSet([
+    ['token', token],
+    ['user', JSON.stringify(user)],
+  ]);
+};
+
+export const getToken = async () => AsyncStorage.getItem('token');
+
+export const getUser = async () => {
+  const user = await AsyncStorage.getItem('user');
+  return user ? JSON.parse(user) : null;
+};
+
+export const clearAuth = async () => {
+  await AsyncStorage.multiRemove(['token', 'user']);
+};
+```
+
+---
+
+## SOCKET.IO SETUP
+
+### `src/services/socket.js`
+```js
+import { io } from 'socket.io-client';
+
+const SOCKET_URL = 'http://localhost:8000';
+let socket = null;
+
+export const connectSocket = () => {
+  if (!socket) {
+    socket = io(SOCKET_URL, {
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
+
+    socket.on('connect', () => console.log('🔌 Socket connected'));
+    socket.on('disconnect', () => console.log('❌ Socket disconnected'));
+  }
+  return socket;
+};
+
+export const getSocket = () => socket;
+
+export const joinMerchantRooms = (restaurantIds) => {
+  const s = getSocket();
+  if (s) {
+    restaurantIds.forEach((id) => {
+      s.emit('join_merchant_room', id);
+    });
+  }
+};
+
+export const disconnectSocket = () => {
+  if (socket) {
+    socket.disconnect();
+    socket = null;
+  }
+};
+```
+
+---
+
+## ZUSTAND STORES
+
+### `src/store/auth.store.js`
+```js
+import { create } from 'zustand';
+import { saveAuth, clearAuth, getToken, getUser } from '../utils/storage';
+import { loginApi, registerApi, getMeApi } from '../api/auth.api';
+import { connectSocket, joinMerchantRooms, disconnectSocket } from '../services/socket';
+
+const useAuthStore = create((set, get) => ({
+  user: null,
+  token: null,
+  isAuthenticated: false,
+  isLoading: true,
+
+  initialize: async () => {
+    try {
+      const token = await getToken();
+      const user = await getUser();
+      if (token && user) {
+        set({ user, token, isAuthenticated: true });
+        connectSocket();
+      }
+    } catch (e) {
+      console.log('Init error', e);
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  login: async (email, password) => {
+    const res = await loginApi(email, password);
+    const { token, user } = res.data.data;
+    await saveAuth(token, user);
+    set({ user, token, isAuthenticated: true });
+    connectSocket();
+  },
+
+  register: async (data) => {
+    const res = await registerApi({ ...data, role: 'MERCHANT' });
+    const { token, user } = res.data.data;
+    await saveAuth(token, user);
+    set({ user, token, isAuthenticated: true });
+    connectSocket();
+  },
+
+  logout: async () => {
+    await clearAuth();
+    disconnectSocket();
+    set({ user: null, token: null, isAuthenticated: false });
+  },
+}));
+
+export default useAuthStore;
+```
+
+### `src/store/order.store.js`
+```js
+import { create } from 'zustand';
+import { getRestaurantOrdersApi, updateOrderStatusApi } from '../api/order.api';
+
+const useOrderStore = create((set, get) => ({
+  orders: [],
+  activeFilter: 'ALL',
+  isLoading: false,
+
+  fetchOrders: async (restaurantId, status = null) => {
+    set({ isLoading: true });
+    try {
+      const res = await getRestaurantOrdersApi(restaurantId, status);
+      set({ orders: res.data.data.orders });
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  setFilter: (filter) => set({ activeFilter: filter }),
+
+  addOrder: (order) => {
+    set((state) => ({ orders: [order, ...state.orders] }));
+  },
+
+  updateOrderStatus: async (orderId, status) => {
+    await updateOrderStatusApi(orderId, status);
+    set((state) => ({
+      orders: state.orders.map((o) =>
+        o.id === orderId ? { ...o, status } : o
+      ),
+    }));
+  },
+
+  removeOrder: (orderId) => {
+    set((state) => ({
+      orders: state.orders.filter((o) => o.id !== orderId),
+    }));
+  },
+}));
+
+export default useOrderStore;
+```
+
+---
+
+## SCREENS — FULL IMPLEMENTATION
+
+---
+
+### 1. SPLASH SCREEN
+`src/screens/auth/SplashScreen.js`
+
+- Show the Lanieats logo centered on a `#FF6B00` orange background
+- Logo: bold "L" mark + "lanieats" wordmark in white Sora font
+- Tagline below: *"for merchants"* in small DM Sans, white, letter-spaced
+- Animate logo scale from 0.8 → 1.0 with a fade-in on mount
+- After 2 seconds, check AsyncStorage for a token:
+  - If token exists → call `GET /auth/me` to validate → navigate to Main app
+  - If no token → navigate to Onboarding
+- Show subtle pulsing animation while checking
+
+---
+
+### 2. ONBOARDING SCREEN
+`src/screens/auth/OnboardingScreen.js`
+
+Three slides using a FlatList with `pagingEnabled`:
+
+**Slide 1 — Orange background**
+- Large 🍽️ emoji or custom illustration
+- Title: "Manage Your Restaurant"
+- Subtitle: "Accept orders, update your menu, and track deliveries — all in one place."
+
+**Slide 2 — Navy background**
+- Large 📦 emoji
+- Title: "Real-Time Orders"
+- Subtitle: "Get notified the moment a customer places an order. Never miss a beat."
+
+**Slide 3 — White background with orange accents**
+- Large 📊 emoji
+- Title: "Grow Your Business"
+- Subtitle: "Track your performance, manage multiple restaurants, and serve Lagos better."
+- "Get Started" orange button → LoginScreen
+- "Already have an account? Sign In" link
+
+Dot indicators at the bottom. Auto-advance every 4 seconds.
+
+---
+
+### 3. LOGIN SCREEN
+`src/screens/auth/LoginScreen.js`
+
+**Layout:**
+- White background
+- Back to top: Lanieats logo (small, orange) + "Merchant Portal" text
+- Heading: "Welcome back 👋" in Sora Bold, 28px, navy
+- Subtext: "Sign in to manage your restaurant" in DM Sans, gray
+
+**Form using React Hook Form:**
+- Email input (keyboard: email-address, auto-lowercase)
+- Password input (secureTextEntry, show/hide toggle with eye icon)
+- "Sign In" orange button — full width, 54px height, 16px border radius
+  - Shows loading spinner inside button while API call is in flight
+  - Disable button during loading
+
+**API Call:**
+```js
+POST /auth/login
+{ email, password }
+```
+- On success: save token + user → navigate to Main
+- On error: show inline error message in red below the form
+
+**Bottom link:** "Don't have an account? Register" → RegisterScreen
+
+**Validation rules:**
+- Email: required, valid email format
+- Password: required, min 6 characters
+
+Show field-level error messages in red below each input.
+
+---
+
+### 4. REGISTER SCREEN
+`src/screens/auth/RegisterScreen.js`
+
+**Form:**
+- First Name input
+- Last Name input
+- Email input
+- Phone input (Nigerian format: 080XXXXXXXX)
+- Password input (with strength indicator bar below)
+- Confirm Password input
+
+**API Call:**
+```js
+POST /auth/register
+{
+  firstName, lastName, email, phone, password,
+  role: "MERCHANT"
+}
+```
+
+Password strength indicator:
+- Weak (< 6 chars): red bar 25% width
+- Fair (6+ chars): amber bar 50% width
+- Good (8+ chars + number): orange bar 75% width
+- Strong (8+ chars + number + symbol): green bar 100% width
+
+On success: navigate to CreateRestaurantScreen with a prompt:
+"One more step — set up your first restaurant to start receiving orders."
+
+---
+
+### 5. CREATE RESTAURANT SCREEN
+`src/screens/restaurant/CreateRestaurantScreen.js`
+
+Shown after registration (first time) and from the restaurant management screen.
+
+**Header:** "Set Up Your Restaurant" (first time) or "Add Restaurant" (returning)
+
+**Form:**
+- Restaurant Name (required)
+- Description (multiline, optional, max 200 chars with live character count)
+- Street Address (required)
+- City (required) — dropdown with major Nigerian cities: Lagos, Abuja, Port Harcourt, Ibadan, Kano, Enugu, Benin City, Uyo
+- State (auto-filled based on city selection)
+- Opening Time (time picker, e.g. 08:00)
+- Closing Time (time picker, e.g. 22:00)
+
+**API Call:**
+```js
+POST /restaurants
+{
+  name, description, address, city, state,
+  openingTime, closingTime
+}
+```
+
+On success: navigate to Main app (Orders tab).
+
+Show an info banner: "Your restaurant is pending admin approval. You can set up your menu in the meantime."
+
+---
+
+### 6. MAIN NAVIGATOR (Bottom Tabs)
+`src/navigation/MainNavigator.js`
+
+Tab bar style:
+- Background: `#0D1B2A` (dark navy)
+- Active icon/label: `#FF6B00` (orange)
+- Inactive: `#9CA3AF` (muted gray)
+- Height: 65px with safe area padding
+
+**4 tabs:**
+
+| Tab | Icon | Screen |
+|-----|------|--------|
+| Orders | `receipt-outline` | OrdersScreen |
+| Menu | `restaurant-outline` | MenuScreen |
+| Restaurant | `storefront-outline` | RestaurantScreen |
+| Profile | `person-outline` | ProfileScreen |
+
+Show a red badge with count on the Orders tab when there are new/pending orders.
+
+---
+
+### 7. ORDERS SCREEN
+`src/screens/orders/OrdersScreen.js`
+
+This is the most important screen. Merchants spend most of their time here.
+
+**Header:**
+- "Orders" title in Sora Bold
+- Restaurant name subtitle in DM Sans gray
+- Online/offline toggle for restaurant (calls PATCH `/restaurants/:id` with `{ isOpen: true/false }`)
+- The toggle should be prominent — pill shaped, green when open, red when closed
+
+**Status Filter Tabs** (horizontal scrollable):
+```
+ALL | PENDING | CONFIRMED | PREPARING | READY | DELIVERED | CANCELLED
+```
+- Active tab: orange text + orange underline
+- Inactive: gray text
+
+**API Call on mount:**
+```js
+GET /orders/restaurant/:restaurantId
+GET /orders/restaurant/:restaurantId?status=PENDING  // for filtered tabs
+```
+
+**Pull to refresh** on the orders list.
+
+**Socket.io Integration — set up on mount:**
+```js
+socket.on('new_order', (data) => {
+  // 1. Play notification sound using expo-av
+  // 2. Show a toast notification at top: "New order received! 🍽️"
+  // 3. Vibrate device using expo-haptics
+  // 4. Refetch orders list
+  // 5. Show animated badge on Orders tab
+});
+
+socket.on('order_cancelled', (data) => {
+  // Update order in list to CANCELLED status
+  // Show toast: "Customer cancelled an order"
+});
+
+socket.on('rider_assigned', (data) => {
+  // Update order card to show "Rider on the way"
+});
+```
+
+**Order Card Design** (`src/components/orders/OrderCard.js`):
+
+```
+┌────────────────────────────────────────────┐
+│  #4291            🕐 5 mins ago   [PENDING] │
+│  ─────────────────────────────────────────  │
+│  👤 Jabulani Doe  📞 08012345678            │
+│  ─────────────────────────────────────────  │
+│  2x Jollof Rice + Chicken                   │
+│  1x Peppered Fish                           │
+│  ─────────────────────────────────────────  │
+│  Subtotal: ₦5,000   Delivery: ₦1,500       │
+│  Total: ₦6,700                              │
+│  ─────────────────────────────────────────  │
+│  📍 15 Admiralty Way, Lagos                 │
+│  ─────────────────────────────────────────  │
+│  [CANCEL]              [CONFIRM ORDER →]    │
+└────────────────────────────────────────────┘
+```
+
+Status badge colors:
+- PENDING → amber
+- CONFIRMED → blue
+- PREPARING → orange
+- READY_FOR_PICKUP → purple
+- OUT_FOR_DELIVERY → cyan
+- DELIVERED → green
+- CANCELLED → red
+
+Order number should be the last 4 characters of the order ID (uppercase).
+
+Action buttons based on status:
+- `PENDING` → "Start Preparing" (orange primary) + "Cancel" (red outline)
+- `CONFIRMED` → "Start Preparing" (orange primary)
+- `PREPARING` → "Mark Ready for Pickup" (orange primary)
+- `READY_FOR_PICKUP` → Waiting state — show "Waiting for rider..." with a pulsing indicator
+- `OUT_FOR_DELIVERY` → Show "Out for delivery 🏍️" — no action needed
+- `DELIVERED` → Show "Delivered ✓" in green — no action
+
+On action button press → call `PATCH /orders/:id/status` with the next status.
+
+**Empty state:** When no orders match the filter, show a clean illustration + "No orders yet" message.
+
+**New order animation:** When a new order arrives via socket, animate it sliding in from the top with a spring animation.
+
+---
+
+### 8. ORDER DETAIL SCREEN
+`src/screens/orders/OrderDetailScreen.js`
+
+Navigate here from OrderCard tap.
+
+**Full order breakdown:**
+
+- Order number + status badge at top
+- Customer info card: name, phone (tappable to call via `Linking.openURL('tel:...')`)
+- Order items list with quantity, name, unit price, total price
+- Price breakdown: subtotal, delivery fee, service charge, total in bold orange
+- Delivery address with a small static map preview (use `expo-maps` or just show the address prominently)
+- Rider info section (shown when status is ASSIGNED or later): rider name, phone, vehicle type
+- Timestamp: ordered at, confirmed at, estimated delivery
+
+Action buttons — same logic as OrderCard.
+
+Status stepper at bottom:
+```
+● Placed → ● Confirmed → ● Preparing → ● Ready → ● Delivered
+```
+Color the completed steps in orange, current step pulsing, future steps gray.
+
+---
+
+### 9. RESTAURANT SCREEN
+`src/screens/restaurant/RestaurantScreen.js`
+
+**API Call:**
+```js
+GET /restaurants/merchant/me
+```
+
+If the merchant has no restaurant → show "Add Your First Restaurant" CTA.
+
+If they have restaurants, show a list of **Restaurant Cards**:
+
+```
+┌────────────────────────────────────────────┐
+│  [COVER IMAGE / PLACEHOLDER]               │
+│  ─────────────────────────────────────────  │
+│  🍽️ Mama Emeka Kitchen          [OPEN ●]   │
+│  Lagos, Lagos                               │
+│  ⭐ 4.5  (12 reviews)                       │
+│  08:00 – 22:00                             │
+│  ─────────────────────────────────────────  │
+│  [Edit Restaurant]    [Manage Menu →]       │
+└────────────────────────────────────────────┘
+```
+
+The `[OPEN ●]` / `[CLOSED ●]` pill is tappable — calls `PATCH /restaurants/:id` with `{ isOpen: !current }`.
+
+Approval status banner: if `isApproved: false`, show an amber banner:
+"⏳ Pending admin approval. Your restaurant will go live once approved."
+
+If `isApproved: true` and `isOpen: false`, show a subtle info: "Your restaurant is currently closed."
+
+"Add Restaurant" floating button (FAB) at bottom right — orange, with + icon.
+
+---
+
+### 10. EDIT RESTAURANT SCREEN
+`src/screens/restaurant/EditRestaurantScreen.js`
+
+Same form as Create Restaurant but pre-filled with existing data.
+
+**Additional fields:**
+- Logo upload: show current logo (or placeholder), tap to pick from gallery
+- Cover photo upload: wide banner image
+
+**Image upload flow:**
+```js
+// 1. expo-image-picker to select image
+// 2. Upload to Cloudinary
+// 3. Save returned URL via PATCH /restaurants/:id
+
+const uploadToCloudinary = async (uri) => {
+  const formData = new FormData();
+  formData.append('file', { uri, type: 'image/jpeg', name: 'upload.jpg' });
+  formData.append('upload_preset', 'lanieats_merchants');
+  const res = await axios.post(
+    'https://api.cloudinary.com/v1_1/YOUR_CLOUD_NAME/image/upload',
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } }
+  );
+  return res.data.secure_url;
+};
+```
+
+**API Call:**
+```js
+PATCH /restaurants/:id
+{ name, description, address, city, state, openingTime, closingTime, logoUrl, coverUrl }
+```
+
+---
+
+### 11. MENU SCREEN
+`src/screens/menu/MenuScreen.js`
+
+**Header:**
+- "Menu" title
+- Restaurant selector (if merchant has multiple restaurants — dropdown)
+- "Add Item" button (top right, orange)
+
+**API Call:**
+```js
+GET /restaurants/:restaurantId/menu
+```
+
+**Layout:** Grouped by category with sticky section headers.
+
+**Category section:**
+```
+Rice Dishes                          [+ Add Item]
+─────────────────────────────────────────────────
+[IMG]  Jollof Rice + Chicken    ₦2,500   [● ON]
+       Party jollof, smoky base          [Edit]
+─────────────────────────────────────────────────
+[IMG]  Fried Rice + Turkey      ₦3,000   [● ON]
+                                         [Edit]
+```
+
+Availability toggle per item — calls:
+```js
+PUT /restaurants/:restaurantId/menu/:itemId
+{ isAvailable: true/false }
+```
+
+Swipe left on an item to reveal a red delete button.
+
+"Add Category" button at the bottom — opens a bottom sheet with a text input.
+```js
+POST /restaurants/:restaurantId/menu/categories
+{ name }
+```
+
+Empty state: "Your menu is empty. Add your first item to start receiving orders."
+
+---
+
+### 12. ADD/EDIT MENU ITEM SCREEN
+`src/screens/menu/AddMenuItemScreen.js`
+`src/screens/menu/EditMenuItemScreen.js`
+
+**Form:**
+- Item image (upload to Cloudinary, show preview)
+- Item Name (required)
+- Description (optional, multiline)
+- Price in ₦ (numeric keyboard, required)
+- Category (dropdown of existing categories)
+- Available toggle (default: on)
+
+**Price input:** Format with ₦ prefix and comma separators as user types:
+```js
+// ₦2,500 displayed, 2500 sent to API
+```
+
+**API Calls:**
+```js
+// Add:
+POST /restaurants/:restaurantId/menu
+{ name, description, price, categoryId, imageUrl }
+
+// Edit:
+PUT /restaurants/:restaurantId/menu/:itemId
+{ name, description, price, categoryId, imageUrl, isAvailable }
+```
+
+---
+
+### 13. PROFILE SCREEN
+`src/screens/profile/ProfileScreen.js`
+
+**Layout:**
+- Avatar circle at top (initials if no photo) with orange ring
+- Merchant name + email
+- Business name from merchant profile
+
+**Info Cards:**
+- Business info: business name, phone
+- Account info: email, phone, role badge
+
+**Menu items:**
+- 🏪 My Restaurants → RestaurantScreen
+- 📊 Order History → All orders (no filter)
+- 🔔 Notifications settings
+- 🔒 Change Password (form with current + new password)
+- 📞 Contact Support (opens email: support@lanieats.com)
+- 📄 Terms of Service
+- 🚪 Sign Out → confirmation dialog → logout → SplashScreen
+
+**App version** at the bottom in small gray text.
+
+---
+
+## UTILITY FUNCTIONS
+
+### `src/utils/formatters.js`
+```js
+// Format Nigerian currency
+export const formatCurrency = (amount) => {
+  return `₦${Number(amount).toLocaleString('en-NG')}`;
+};
+
+// Format order number from UUID
+export const formatOrderNumber = (id) => {
+  return `#${id.slice(-4).toUpperCase()}`;
+};
+
+// Format relative time
+export const formatRelativeTime = (date) => {
+  const seconds = Math.floor((new Date() - new Date(date)) / 1000);
+  if (seconds < 60) return 'Just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} mins ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return new Date(date).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' });
+};
+
+// Format time (24h to 12h)
+export const formatTime = (time) => {
+  if (!time) return '';
+  const [hours, minutes] = time.split(':');
+  const h = parseInt(hours);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  return `${h % 12 || 12}:${minutes} ${ampm}`;
+};
+```
+
+---
+
+## REUSABLE COMPONENTS
+
+### `src/components/common/Button.js`
+```
+Props: label, onPress, variant ('primary'|'outline'|'ghost'|'danger'), 
+       loading, disabled, fullWidth, size ('sm'|'md'|'lg')
+
+Primary:  orange background, white text
+Outline:  transparent background, orange border + text
+Ghost:    no border, orange text
+Danger:   red background, white text
+
+Loading state: replace label with ActivityIndicator, disable press
+```
+
+### `src/components/common/Input.js`
+```
+Props: label, placeholder, error, value, onChangeText, 
+       secureTextEntry, keyboardType, multiline, rightIcon
+
+Focused state: orange border (1.5px)
+Error state:   red border + red error message below
+```
+
+### `src/components/common/Badge.js`
+```
+Props: label, color ('orange'|'green'|'red'|'amber'|'gray'|'blue')
+
+Small pill shape. All caps. Sora Bold 10px.
+```
+
+### `src/components/common/Toast.js`
+```
+Appears at top of screen, slides down from top
+Auto-dismisses after 3 seconds
+Types: success (green), error (red), info (blue), warning (amber)
+```
+
+### `src/components/common/SkeletonLoader.js`
+```
+Animated shimmer loading placeholders
+Use for OrderCard, MenuItemCard while data loads
+```
+
+---
+
+## NAVIGATION FLOW
+
+```
+App Launch
+    ↓
+SplashScreen (check token)
+    ↓
+Token exists? ──YES──→ Validate with /auth/me ──OK──→ MainNavigator
+    ↓ NO                                         ↓ FAIL
+OnboardingScreen                          LoginScreen
+    ↓
+LoginScreen ←──────── RegisterScreen
+    ↓ success              ↓ success
+    └──────────────────────┘
+              ↓
+    New merchant? → CreateRestaurantScreen → MainNavigator
+    Existing?     → MainNavigator directly
+
+
+MainNavigator (Bottom Tabs)
+├── Orders Tab
+│   ├── OrdersScreen
+│   └── OrderDetailScreen
+├── Menu Tab
+│   ├── MenuScreen
+│   ├── AddMenuItemScreen
+│   └── EditMenuItemScreen
+├── Restaurant Tab
+│   ├── RestaurantScreen
+│   ├── CreateRestaurantScreen
+│   └── EditRestaurantScreen
+└── Profile Tab
+    └── ProfileScreen
+```
+
+---
+
+## NOTIFICATION SETUP
+
+```js
+// src/services/notifications.js
+import * as Notifications from 'expo-notifications';
+import * as Haptics from 'expo-haptics';
+import { Audio } from 'expo-av';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
+
+export const requestNotificationPermission = async () => {
+  const { status } = await Notifications.requestPermissionsAsync();
+  return status === 'granted';
+};
+
+export const showNewOrderNotification = async (order) => {
+  // Vibrate
+  await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+  // Local push notification
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: '🍽️ New Order!',
+      body: `Order ${formatOrderNumber(order.orderId)} — ₦${order.total}`,
+      sound: true,
+    },
+    trigger: null, // immediate
+  });
+};
+```
+
+---
+
+## ERROR HANDLING PATTERN
+
+Apply this pattern to every API call throughout the app:
+
+```js
+try {
+  setLoading(true);
+  const res = await api.call();
+  // handle success
+} catch (error) {
+  const message = error.response?.data?.message || 'Something went wrong';
+  
+  // Show validation errors per field if present
+  if (error.response?.data?.errors) {
+    error.response.data.errors.forEach((err) => {
+      setError(err.field, { message: err.message });
+    });
+    return;
+  }
+
+  // Show toast for general errors
+  showToast({ type: 'error', message });
+} finally {
+  setLoading(false);
+}
+```
+
+---
+
+## BUSINESS RULES TO ENFORCE IN UI
+
+1. **Merchant must be approved** — if `merchant.isApproved` is false, show a "Pending Approval" banner on the restaurant screen. They can still manage menus but cannot receive orders.
+
+2. **Order status flow is one-directional** — once an order is PREPARING, do not show a button to go back to CONFIRMED.
+
+3. **Only PENDING and CONFIRMED orders can be cancelled** by the merchant — hide cancel button for any other status.
+
+4. **Merchant status mapping for PATCH /orders/:id/status:**
+   - From `CONFIRMED` or `PENDING` → next action is `PREPARING`
+   - From `PREPARING` → next action is `READY_FOR_PICKUP`
+   - Note: `CONFIRMED` is now set automatically by payment — merchant's first manual action is `PREPARING`
+
+5. **isOpen toggle** — make it very obvious when the restaurant is closed. Show a full-width amber banner on the Orders screen: "Your restaurant is currently closed. Customers cannot place orders."
+
+6. **Real-time orders tab badge** — count PENDING + CONFIRMED orders for the badge number on the Orders tab.
+
+---
+
+## PRODUCTION QUALITY CHECKLIST
+
+Ensure every screen has:
+- [ ] Loading state (skeleton or spinner) while data fetches
+- [ ] Empty state with clear messaging and a CTA
+- [ ] Error state with retry option
+- [ ] Pull-to-refresh on list screens
+- [ ] Keyboard avoiding behavior on forms
+- [ ] Safe area insets respected (`useSafeAreaInsets`)
+- [ ] Proper scroll behavior with `KeyboardAwareScrollView`
+- [ ] All currency displayed as ₦X,XXX format
+- [ ] All dates/times in Nigerian context (WAT timezone)
+- [ ] Haptic feedback on important actions (order confirmed, etc.)
+- [ ] Loading indicator inside buttons during submissions
+- [ ] Buttons disabled while API calls are in flight
+- [ ] No raw UUIDs shown to users — always format order numbers
+
+---
+
+## FINAL NOTES FOR Claude code
+
+- Build screen by screen in this order: Auth → Orders → Restaurant → Menu → Profile
+- Do not skip any loading, error, or empty states
+- Every form must use React Hook Form with proper validation
+- All API calls go through the central `src/api/client.js` — never use fetch directly
+- Socket.io connection should persist for the entire session — connect on login, disconnect on logout
+- Keep components small and focused — split into smaller components when a component exceeds 150 lines
+- Use the Zustand stores for shared state — do not prop-drill
+- Test every screen on both iOS and Android layouts
