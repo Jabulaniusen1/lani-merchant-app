@@ -25,7 +25,7 @@ const useRestaurantStore = create((set, get) => ({
 
   createRestaurant: async (data) => {
     const res = await createRestaurantApi(data);
-    const restaurant = res.data.data;
+    const restaurant = res.data.data?.restaurant || res.data.data;
     set((state) => ({
       restaurants: [...state.restaurants, restaurant],
       activeRestaurant: state.activeRestaurant || restaurant,
@@ -35,7 +35,7 @@ const useRestaurantStore = create((set, get) => ({
 
   updateRestaurant: async (id, data) => {
     const res = await updateRestaurantApi(id, data);
-    const updated = res.data.data;
+    const updated = res.data.data?.restaurant || res.data.data;
     set((state) => ({
       restaurants: state.restaurants.map((r) => (r.id === id ? updated : r)),
       activeRestaurant:

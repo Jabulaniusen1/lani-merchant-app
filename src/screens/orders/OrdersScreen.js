@@ -61,17 +61,24 @@ export default function OrdersScreen() {
       showToast({ type: 'warning', message: 'Customer cancelled an order' });
     };
 
+    const handleOrderConfirmed = (data) => {
+      updateOrderInList(data.orderId || data.id, { status: 'CONFIRMED' });
+      showToast({ type: 'success', message: '💳 Payment received — order confirmed!' });
+    };
+
     const handleRiderAssigned = (data) => {
       updateOrderInList(data.orderId || data.id, { rider: data.rider, status: 'OUT_FOR_DELIVERY' });
       showToast({ type: 'info', message: 'Rider assigned to order' });
     };
 
     socket.on('new_order', handleNewOrder);
+    socket.on('order_confirmed', handleOrderConfirmed);
     socket.on('order_cancelled', handleOrderCancelled);
     socket.on('rider_assigned', handleRiderAssigned);
 
     return () => {
       socket.off('new_order', handleNewOrder);
+      socket.off('order_confirmed', handleOrderConfirmed);
       socket.off('order_cancelled', handleOrderCancelled);
       socket.off('rider_assigned', handleRiderAssigned);
     };

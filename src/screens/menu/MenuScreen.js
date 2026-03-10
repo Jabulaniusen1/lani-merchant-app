@@ -37,43 +37,30 @@ export default function MenuScreen() {
     try {
       const res = await getMenuApi(restaurantId);
 
-      // --- DEBUG LOGGING ---
-      console.log('🍽️ Menu API raw res.data:', JSON.stringify(res.data, null, 2));
-      // ---------------------
+      const data = res.data.data ?? res.data;
 
-      const data = res.data.data ?? res.data; // fallback if no .data wrapper
-      console.log('🍽️ Menu data shape:', JSON.stringify(data, null, 2));
-
-      // Normalize menu data — could be array or categorized
       if (Array.isArray(data)) {
-        console.log('🍽️ Format: flat array, count:', data.length);
         const grouped = groupByCategory(data);
         setMenuData(grouped);
         setCategories([...new Set(data.map((i) => i.category?.name || 'Uncategorized').filter(Boolean))]);
       } else if (data?.categories) {
-        console.log('🍽️ Format: categorized, categories:', data.categories.length);
         const sections = data.categories.map((cat) => ({
           title: cat.name,
           id: cat.id,
           data: cat.items || cat.menuItems || [],
         }));
-        console.log('🍽️ Sections built:', JSON.stringify(sections.map(s => ({ title: s.title, count: s.data.length })), null, 2));
         setMenuData(sections);
         setCategories(data.categories);
       } else if (data?.menuItems) {
-        console.log('🍽️ Format: menuItems key, count:', data.menuItems.length);
         const grouped = groupByCategory(data.menuItems);
         setMenuData(grouped);
       } else if (data?.items) {
-        console.log('🍽️ Format: items key, count:', data.items.length);
         const grouped = groupByCategory(data.items);
         setMenuData(grouped);
       } else {
-        console.log('🍽️ No recognized format. data keys:', data ? Object.keys(data) : 'null/undefined');
         setMenuData([]);
       }
-    } catch (err) {
-      console.log('🍽️ Menu load error:', err?.response?.data || err?.message);
+    } catch {
       showToast({ type: 'error', message: 'Failed to load menu' });
     } finally {
       setIsLoading(false);
