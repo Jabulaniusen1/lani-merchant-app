@@ -10,7 +10,8 @@
       "Read(//Users/mac/Desktop/lanieats code base/lani-merchants-app/.claude/worktrees/agent-a7f68cb4/=== .ts/.tsx files in app/**)",
       "Bash(__NEW_LINE_27fef0ce5eaeb38d__ echo:*)",
       "Read(//Users/mac/Desktop/lanieats code base/lani-merchants-app/.claude/worktrees/agent-a7f68cb4/$BASE/**)",
-      "Read(//Users/mac/Desktop/lanieats code base/lani-merchants-app/.claude/worktrees/agent-a7f68cb4/**)"
+      "Read(//Users/mac/Desktop/lanieats code base/lani-merchants-app/.claude/worktrees/agent-a7f68cb4/**)",
+      "Bash(node -e \"const ip = require\\(''expo-image-picker''\\); console.log\\(Object.keys\\(ip\\).filter\\(k => k.toLowerCase\\(\\).includes\\(''media''\\)\\)\\)\")"
     ]
   }
 }

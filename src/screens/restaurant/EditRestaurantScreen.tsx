@@ -79,7 +79,7 @@ export default function EditRestaurantScreen(): React.JSX.Element {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaType.Images,
+      mediaTypes: 'images',
       allowsEditing: true,
       aspect: type === 'logo' ? [1, 1] : [16, 9],
       quality: 0.8,
