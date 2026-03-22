@@ -16,6 +16,20 @@ import useRestaurantStore from '../../store/restaurant.store';
 import { uploadRestaurantLogo, uploadRestaurantCover } from '../../api/upload.api';
 import { colors } from '../../theme/colors';
 import { NIGERIAN_CITIES, type NigerianCity } from '../../utils/constants';
+import type { RestaurantType } from '../../types';
+
+const RESTAURANT_TYPES: { label: string; value: RestaurantType }[] = [
+  { label: 'Fast Food', value: 'FAST_FOOD' },
+  { label: 'Local', value: 'LOCAL' },
+  { label: 'Continental', value: 'CONTINENTAL' },
+  { label: 'Pizza', value: 'PIZZA' },
+  { label: 'Grill', value: 'GRILL' },
+  { label: 'Bakery', value: 'BAKERY' },
+  { label: 'Cafe', value: 'CAFE' },
+  { label: 'Chinese', value: 'CHINESE' },
+  { label: 'Seafood', value: 'SEAFOOD' },
+  { label: 'Vegetarian', value: 'VEGETARIAN' },
+];
 
 interface EditRestaurantFormData {
   name: string;
@@ -34,6 +48,7 @@ export default function EditRestaurantScreen(): React.JSX.Element {
   const { restaurants, updateRestaurant } = useRestaurantStore();
   const [loading, setLoading] = useState<boolean>(false);
   const [showCityPicker, setShowCityPicker] = useState<boolean>(false);
+  const [restaurantType, setRestaurantType] = useState<RestaurantType | null>(null);
   const [logoUploadLoading, setLogoUploadLoading] = useState<boolean>(false);
   const [coverUploadLoading, setCoverUploadLoading] = useState<boolean>(false);
   const [logoUri, setLogoUri] = useState<string | null>(null);
@@ -68,6 +83,7 @@ export default function EditRestaurantScreen(): React.JSX.Element {
       });
       if (restaurant.logoUrl) setLogoUri(restaurant.logoUrl);
       if (restaurant.coverUrl) setCoverUri(restaurant.coverUrl);
+      if (restaurant.restaurantType) setRestaurantType(restaurant.restaurantType);
     }
   }, [restaurant, reset]);
 
@@ -118,7 +134,7 @@ export default function EditRestaurantScreen(): React.JSX.Element {
   const onSubmit = async (data: EditRestaurantFormData): Promise<void> => {
     setLoading(true);
     try {
-      await updateRestaurant(id, data);
+      await updateRestaurant(id, { ...data, ...(restaurantType ? { restaurantType } : {}) });
       showToast({ type: 'success', message: 'Restaurant updated successfully' });
       router.back();
     } catch (error: unknown) {
@@ -261,6 +277,25 @@ export default function EditRestaurantScreen(): React.JSX.Element {
           )}
         />
 
+        {/* Restaurant Type */}
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>Restaurant Type</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.typePills}>
+            {RESTAURANT_TYPES.map((t) => (
+              <TouchableOpacity
+                key={t.value}
+                style={[styles.typePill, restaurantType === t.value && styles.typePillActive]}
+                onPress={() => setRestaurantType(restaurantType === t.value ? null : t.value)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.typePillText, restaurantType === t.value && styles.typePillTextActive]}>
+                  {t.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
         <View style={styles.row}>
           <View style={styles.halfField}>
             <Controller
@@ -374,4 +409,12 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 12 },
   halfField: { flex: 1 },
   submitBtn: { marginTop: 8 },
+  typePills: { gap: 8, paddingBottom: 4 },
+  typePill: {
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+    backgroundColor: colors.lightGray, borderWidth: 1.5, borderColor: 'transparent',
+  },
+  typePillActive: { backgroundColor: '#FFF3E8', borderColor: colors.primary },
+  typePillText: { fontFamily: 'DMSans_500Medium', fontSize: 13, color: colors.muted },
+  typePillTextActive: { color: colors.primary },
 });

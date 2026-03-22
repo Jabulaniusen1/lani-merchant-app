@@ -14,6 +14,7 @@ import Input from '../../components/common/Input';
 import { showToast } from '../../components/common/Toast';
 import useAuthStore from '../../store/auth.store';
 import { changePasswordApi } from '../../api/auth.api';
+import useMerchantType from '../../hooks/useMerchantType';
 import { colors } from '../../theme/colors';
 
 const APP_VERSION = '1.0.0';
@@ -48,6 +49,7 @@ export default function ProfileScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuthStore();
+  const { Store, merchantType } = useMerchantType();
   const [showChangePassword, setShowChangePassword] = useState<boolean>(false);
   const [changingPassword, setChangingPassword] = useState<boolean>(false);
 
@@ -120,7 +122,7 @@ export default function ProfileScreen(): React.JSX.Element {
           <Text style={styles.userName}>{userName}</Text>
           <Text style={styles.userEmail}>{user?.email ?? ''}</Text>
           <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>MERCHANT</Text>
+            <Text style={styles.roleText}>{merchantType}</Text>
           </View>
         </View>
 
@@ -147,7 +149,7 @@ export default function ProfileScreen(): React.JSX.Element {
         <Card style={styles.card} shadow="sm">
           <MenuItem
             icon="storefront-outline"
-            label="My Restaurants"
+            label={`My ${Store}s`}
             onPress={() => router.push('/(main)/restaurant')}
           />
           <View style={styles.divider} />

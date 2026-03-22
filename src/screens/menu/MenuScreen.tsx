@@ -14,6 +14,7 @@ import Button from '../../components/common/Button';
 import { showToast } from '../../components/common/Toast';
 import { getMenuApi, deleteMenuItemApi, toggleMenuItemAvailabilityApi, addCategoryApi } from '../../api/menu.api';
 import useRestaurantStore from '../../store/restaurant.store';
+import useMerchantType from '../../hooks/useMerchantType';
 import { colors } from '../../theme/colors';
 import type { MenuItem, MenuCategory } from '../../types';
 
@@ -27,6 +28,7 @@ export default function MenuScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { restaurants, activeRestaurant, setActiveRestaurant } = useRestaurantStore();
+  const { Item, Items, Menu, item, items, menu, store, Store, isRestaurant } = useMerchantType();
   const [menuData, setMenuData] = useState<MenuSection[]>([]);
   const [categories, setCategories] = useState<MenuCategory[] | string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -83,7 +85,7 @@ export default function MenuScreen(): React.JSX.Element {
         setMenuData([]);
       }
     } catch {
-      showToast({ type: 'error', message: 'Failed to load menu' });
+      showToast({ type: 'error', message: `Failed to load ${menu}` });
     } finally {
       setIsLoading(false);
     }
@@ -105,6 +107,7 @@ export default function MenuScreen(): React.JSX.Element {
   const handleToggleAvailability = async (itemId: string, isAvailable: boolean): Promise<void> => {
     try {
       await toggleMenuItemAvailabilityApi(restaurantId!, itemId, isAvailable);
+      // availability updated inline
       setMenuData((prev) =>
         prev.map((section) => ({
           ...section,
@@ -114,12 +117,12 @@ export default function MenuScreen(): React.JSX.Element {
         }))
       );
     } catch {
-      showToast({ type: 'error', message: 'Failed to update item availability' });
+      showToast({ type: 'error', message: `Failed to update ${item} availability` });
     }
   };
 
   const handleDelete = (itemId: string): void => {
-    Alert.alert('Delete Item', 'Are you sure you want to delete this menu item?', [
+    Alert.alert(`Delete ${Item}`, `Are you sure you want to delete this ${item}?`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -131,13 +134,13 @@ export default function MenuScreen(): React.JSX.Element {
               prev
                 .map((section) => ({
                   ...section,
-                  data: section.data.filter((item) => item.id !== itemId),
+                  data: section.data.filter((i) => i.id !== itemId),
                 }))
                 .filter((section) => section.data.length > 0)
             );
-            showToast({ type: 'success', message: 'Item deleted' });
+            showToast({ type: 'success', message: `${Item} deleted` });
           } catch {
-            showToast({ type: 'error', message: 'Failed to delete item' });
+            showToast({ type: 'error', message: `Failed to delete ${item}` });
           }
         },
       },
@@ -167,7 +170,7 @@ export default function MenuScreen(): React.JSX.Element {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Menu</Text>
+          <Text style={styles.title}>{isRestaurant ? 'Menu' : Items}</Text>
           {activeRestaurant && (
             <TouchableOpacity
               onPress={() => restaurants.length > 1 && setShowRestaurantPicker(true)}
@@ -185,7 +188,7 @@ export default function MenuScreen(): React.JSX.Element {
           onPress={() => router.push('/(main)/menu/add')}
         >
           <Ionicons name="add" size={20} color="#fff" />
-          <Text style={styles.addBtnText}>Add Item</Text>
+          <Text style={styles.addBtnText}>Add {Item}</Text>
         </TouchableOpacity>
       </View>
 
@@ -193,9 +196,9 @@ export default function MenuScreen(): React.JSX.Element {
         <View style={styles.approvalBanner}>
           <Ionicons name="time-outline" size={18} color="#92400E" />
           <View style={styles.approvalBannerText}>
-            <Text style={styles.approvalBannerTitle}>Menu not visible to customers yet</Text>
+            <Text style={styles.approvalBannerTitle}>{Menu} not visible to customers yet</Text>
             <Text style={styles.approvalBannerBody}>
-              Your menu list will not show on the app until your restaurant has been approved. We&apos;ll notify you once it is approved — it takes just 2–5 business days.
+              Your {menu} will not show on the app until your {store} has been approved. We&apos;ll notify you once it is approved — it takes just 2–5 business days.
             </Text>
           </View>
         </View>
@@ -207,10 +210,10 @@ export default function MenuScreen(): React.JSX.Element {
         </View>
       ) : allItems.length === 0 && menuData.length === 0 ? (
         <EmptyState
-          icon="🍽️"
-          title="Your menu is empty"
-          subtitle="Add your first item to start receiving orders."
-          actionLabel="Add Menu Item"
+          icon={isRestaurant ? '🍽️' : '📦'}
+          title={isRestaurant ? 'Your menu is empty' : `No ${items} yet`}
+          subtitle={`Add your first ${item} to start receiving orders.`}
+          actionLabel={`Add ${Item}`}
           onAction={() => router.push('/(main)/menu/add')}
         />
       ) : (
@@ -234,7 +237,7 @@ export default function MenuScreen(): React.JSX.Element {
                 style={styles.sectionAddBtn}
               >
                 <Ionicons name="add" size={16} color={colors.primary} />
-                <Text style={styles.sectionAddText}>Add Item</Text>
+                <Text style={styles.sectionAddText}>Add {Item}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -304,7 +307,7 @@ export default function MenuScreen(): React.JSX.Element {
           onPress={() => setShowRestaurantPicker(false)}
         >
           <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Select Restaurant</Text>
+            <Text style={styles.modalTitle}>Select {Store}</Text>
             {restaurants.map((r) => (
               <TouchableOpacity
                 key={r.id}

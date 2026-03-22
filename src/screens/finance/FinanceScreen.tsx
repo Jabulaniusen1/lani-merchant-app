@@ -13,7 +13,8 @@ import { colors } from '../../theme/colors';
 import { shadows } from '../../theme/shadows';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 
-function maskAccount(accountNumber: string): string {
+function maskAccount(accountNumber: string | undefined): string {
+  if (!accountNumber) return '****';
   return '****' + accountNumber.slice(-4);
 }
 
@@ -70,6 +71,11 @@ export default function FinanceScreen(): React.JSX.Element {
             <View style={styles.balanceStats}>
               <Text style={styles.balanceStat}>Total Earned: {formatCurrency(earnings.totalEarned)}</Text>
               <Text style={styles.balanceStat}>Total Paid Out: {formatCurrency(earnings.totalPaidOut)}</Text>
+              {earnings.commissionRate != null && (
+                <Text style={styles.balanceStat}>
+                  Your cut: {Math.round(earnings.commissionRate * 100)}% of order subtotal
+                </Text>
+              )}
             </View>
           )}
           <View style={styles.balanceActions}>
@@ -111,18 +117,30 @@ export default function FinanceScreen(): React.JSX.Element {
           {isLoading && !refreshing ? (
             <SkeletonBox width="100%" height={56} style={{ borderRadius: 8 }} />
           ) : bankAccount ? (
-            <View style={styles.bankRow}>
-              <View style={styles.bankInfo}>
-                <View style={styles.bankVerifiedRow}>
-                  <Ionicons name="checkmark-circle" size={16} color={colors.success} />
-                  <Text style={styles.bankName}>{bankAccount.bankName}</Text>
-                  <Text style={styles.bankNumber}>— {maskAccount(bankAccount.accountNumber)}</Text>
+            <View>
+              <View style={styles.bankRow}>
+                <View style={styles.bankInfo}>
+                  <View style={styles.bankVerifiedRow}>
+                    <Ionicons
+                      name={bankAccount.isVerified ? 'checkmark-circle' : 'alert-circle'}
+                      size={16}
+                      color={bankAccount.isVerified ? colors.success : colors.warning}
+                    />
+                    <Text style={styles.bankName}>{bankAccount.bankName}</Text>
+                    <Text style={styles.bankNumber}>— {maskAccount(bankAccount.accountNumber)}</Text>
+                  </View>
+                  <Text style={styles.bankAccountName}>{bankAccount.accountName}</Text>
                 </View>
-                <Text style={styles.bankAccountName}>{bankAccount.accountName}</Text>
+                <TouchableOpacity onPress={() => router.push('/(main)/finance/bank-account')} activeOpacity={0.7}>
+                  <Text style={styles.changeLink}>Change</Text>
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity onPress={() => router.push('/(main)/finance/bank-account')} activeOpacity={0.7}>
-                <Text style={styles.changeLink}>Change</Text>
-              </TouchableOpacity>
+              {bankAccount.isVerified === false && (
+                <View style={styles.bankWarning}>
+                  <Ionicons name="warning-outline" size={13} color={colors.warning} />
+                  <Text style={styles.bankWarningText}>Account not verified — payouts may fail. Tap Change to re-save.</Text>
+                </View>
+              )}
             </View>
           ) : (
             <TouchableOpacity
@@ -257,6 +275,11 @@ const styles = StyleSheet.create({
   bankNumber: { fontFamily: 'DMSans_400Regular', fontSize: 14, color: colors.muted },
   bankAccountName: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: '#374151' },
   changeLink: { fontFamily: 'DMSans_500Medium', fontSize: 13, color: colors.primary },
+  bankWarning: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#FFFBEB', borderRadius: 8, padding: 8, marginTop: 8,
+  },
+  bankWarningText: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: colors.warning, flex: 1 },
   noBankCard: {
     backgroundColor: '#FFFBEB',
     borderRadius: 10,

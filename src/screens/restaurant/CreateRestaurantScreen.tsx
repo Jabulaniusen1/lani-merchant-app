@@ -4,7 +4,7 @@ import {
   KeyboardAvoidingView, Platform, StyleSheet,
 } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import TimePicker from '../../components/common/TimePicker';
@@ -13,6 +13,20 @@ import useRestaurantStore from '../../store/restaurant.store';
 import { colors } from '../../theme/colors';
 import { NIGERIAN_CITIES, type NigerianCity } from '../../utils/constants';
 import { Ionicons } from '@expo/vector-icons';
+import type { RestaurantType } from '../../types';
+
+const RESTAURANT_TYPES: { label: string; value: RestaurantType }[] = [
+  { label: 'Fast Food', value: 'FAST_FOOD' },
+  { label: 'Local', value: 'LOCAL' },
+  { label: 'Continental', value: 'CONTINENTAL' },
+  { label: 'Pizza', value: 'PIZZA' },
+  { label: 'Grill', value: 'GRILL' },
+  { label: 'Bakery', value: 'BAKERY' },
+  { label: 'Cafe', value: 'CAFE' },
+  { label: 'Chinese', value: 'CHINESE' },
+  { label: 'Seafood', value: 'SEAFOOD' },
+  { label: 'Vegetarian', value: 'VEGETARIAN' },
+];
 
 interface CreateRestaurantFormData {
   name: string;
@@ -28,11 +42,32 @@ interface CreateRestaurantScreenProps {
   isFirstTime?: boolean;
 }
 
+const MERCHANT_LABELS: Record<string, { noun: string; heading: string; subheading: string }> = {
+  PHARMACY: {
+    noun: 'Pharmacy',
+    heading: 'Set Up Your Pharmacy',
+    subheading: 'One more step — add your pharmacy details to start fulfilling orders.',
+  },
+  SUPERMARKET: {
+    noun: 'Supermarket',
+    heading: 'Set Up Your Supermarket',
+    subheading: 'One more step — add your supermarket details to start fulfilling orders.',
+  },
+  RESTAURANT: {
+    noun: 'Restaurant',
+    heading: 'Set Up Your Restaurant',
+    subheading: 'One more step — set up your first restaurant to start receiving orders.',
+  },
+};
+
 export default function CreateRestaurantScreen({ isFirstTime = true }: CreateRestaurantScreenProps): React.JSX.Element {
   const router = useRouter();
+  const { merchantType } = useLocalSearchParams<{ merchantType: string }>();
+  const labels = MERCHANT_LABELS[merchantType ?? 'RESTAURANT'] ?? MERCHANT_LABELS.RESTAURANT;
   const { createRestaurant } = useRestaurantStore();
   const [loading, setLoading] = useState<boolean>(false);
   const [showCityPicker, setShowCityPicker] = useState<boolean>(false);
+  const [restaurantType, setRestaurantType] = useState<RestaurantType | null>(null);
 
   const { control, handleSubmit, setValue, watch, formState: { errors } } = useForm<CreateRestaurantFormData>({
     defaultValues: {
@@ -57,8 +92,8 @@ export default function CreateRestaurantScreen({ isFirstTime = true }: CreateRes
   const onSubmit = async (data: CreateRestaurantFormData): Promise<void> => {
     setLoading(true);
     try {
-      await createRestaurant(data);
-      showToast({ type: 'success', message: 'Restaurant created! Pending admin approval.' });
+      await createRestaurant({ ...data, ...(restaurantType ? { restaurantType } : {}) });
+      showToast({ type: 'success', message: `${labels.noun} created! Pending admin approval.` });
       router.replace('/(main)/orders');
     } catch (error: unknown) {
       const message =
@@ -86,12 +121,12 @@ export default function CreateRestaurantScreen({ isFirstTime = true }: CreateRes
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.heading}>
-          {isFirstTime ? 'Set Up Your Restaurant' : 'Add Restaurant'}
+          {isFirstTime ? labels.heading : `Add ${labels.noun}`}
         </Text>
         <Text style={styles.subheading}>
           {isFirstTime
-            ? 'One more step — set up your first restaurant to start receiving orders.'
-            : 'Add another restaurant to your account.'}
+            ? labels.subheading
+            : `Add another ${labels.noun.toLowerCase()} to your account.`}
         </Text>
 
         <View style={styles.infoBanner}>
@@ -107,8 +142,8 @@ export default function CreateRestaurantScreen({ isFirstTime = true }: CreateRes
           rules={{ required: 'Restaurant name is required' }}
           render={({ field: { onChange, value } }) => (
             <Input
-              label="Restaurant Name"
-              placeholder="e.g. Mama Emeka Kitchen"
+              label={`${labels.noun} Name`}
+              placeholder={`e.g. Mama Emeka ${labels.noun}`}
               value={value}
               onChangeText={onChange}
               error={errors.name?.message}
@@ -194,6 +229,27 @@ export default function CreateRestaurantScreen({ isFirstTime = true }: CreateRes
           )}
         />
 
+        {/* Restaurant Type — only for restaurants */}
+        {(!merchantType || merchantType === 'RESTAURANT') && (
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Restaurant Type <Text style={{ color: colors.muted, fontFamily: 'DMSans_400Regular' }}>(optional)</Text></Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.typePills}>
+              {RESTAURANT_TYPES.map((t) => (
+                <TouchableOpacity
+                  key={t.value}
+                  style={[styles.typePill, restaurantType === t.value && styles.typePillActive]}
+                  onPress={() => setRestaurantType(restaurantType === t.value ? null : t.value)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.typePillText, restaurantType === t.value && styles.typePillTextActive]}>
+                    {t.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         <View style={styles.row}>
           <View style={styles.halfField}>
             <Controller
@@ -218,7 +274,7 @@ export default function CreateRestaurantScreen({ isFirstTime = true }: CreateRes
         </View>
 
         <Button
-          label={loading ? '' : 'Create Restaurant'}
+          label={loading ? '' : `Create ${labels.noun}`}
           onPress={handleSubmit(onSubmit)}
           loading={loading}
           fullWidth
@@ -277,4 +333,12 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 12 },
   halfField: { flex: 1 },
   submitBtn: { marginTop: 8, marginBottom: 32 },
+  typePills: { gap: 8, paddingBottom: 4 },
+  typePill: {
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+    backgroundColor: colors.lightGray, borderWidth: 1.5, borderColor: 'transparent',
+  },
+  typePillActive: { backgroundColor: '#FFF3E8', borderColor: colors.primary },
+  typePillText: { fontFamily: 'DMSans_500Medium', fontSize: 13, color: colors.muted },
+  typePillTextActive: { color: colors.primary },
 });

@@ -12,6 +12,7 @@ import EmptyState from '../../components/common/EmptyState';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { showToast } from '../../components/common/Toast';
 import useRestaurantStore from '../../store/restaurant.store';
+import useMerchantType from '../../hooks/useMerchantType';
 import { colors } from '../../theme/colors';
 import { shadows } from '../../theme/shadows';
 import type { Restaurant } from '../../types';
@@ -22,6 +23,7 @@ export default function RestaurantScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { restaurants, isLoading, fetchRestaurants, toggleOpen, toggleBusyMode } = useRestaurantStore();
+  const { isRestaurant } = useMerchantType();
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
   // Busy mode sheet state
@@ -130,8 +132,8 @@ export default function RestaurantScreen(): React.JSX.Element {
                   onToggleOpen={handleToggleOpen}
                 />
 
-                {/* Busy Mode Row */}
-                <View style={[styles.busyRow, shadows.sm as object]}>
+                {/* Busy Mode Row — restaurants only */}
+                {isRestaurant && <View style={[styles.busyRow, shadows.sm as object]}>
                   <View style={styles.busyLeft}>
                     <Ionicons name="hourglass-outline" size={18} color={item.isBusy ? colors.error : colors.muted} />
                     <View>
@@ -151,7 +153,7 @@ export default function RestaurantScreen(): React.JSX.Element {
                       {item.isBusy ? 'ON' : 'OFF'}
                     </Text>
                   </TouchableOpacity>
-                </View>
+                </View>}
 
                 <View style={styles.restaurantActions}>
                   <Button

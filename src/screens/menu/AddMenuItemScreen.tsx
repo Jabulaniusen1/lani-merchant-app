@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Image,
-  KeyboardAvoidingView, Platform, StyleSheet,
+  KeyboardAvoidingView, Platform, Switch, StyleSheet,
 } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -14,6 +14,7 @@ import { showToast } from '../../components/common/Toast';
 import { addMenuItemApi, getMenuApi } from '../../api/menu.api';
 import { uploadMenuItemImage } from '../../api/upload.api';
 import useRestaurantStore from '../../store/restaurant.store';
+import useMerchantType from '../../hooks/useMerchantType';
 import { colors } from '../../theme/colors';
 import { formatPriceInput, parsePriceInput } from '../../utils/formatters';
 import type { MenuCategory } from '../../types';
@@ -25,6 +26,8 @@ interface AddMenuItemFormData {
   categoryId: string;
   categoryName: string;
   isAvailable: boolean;
+  stockQuantity: string;
+  requiresPrescription: boolean;
 }
 
 export default function AddMenuItemScreen(): React.JSX.Element {
@@ -32,6 +35,7 @@ export default function AddMenuItemScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { activeRestaurant } = useRestaurantStore();
+  const { Item, item } = useMerchantType();
   const [loading, setLoading] = useState<boolean>(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
@@ -47,8 +51,13 @@ export default function AddMenuItemScreen(): React.JSX.Element {
       categoryId: categoryId ?? '',
       categoryName: categoryName ?? '',
       isAvailable: true,
+      stockQuantity: '',
+      requiresPrescription: false,
     },
   });
+  const { merchantType, isRestaurant } = useMerchantType();
+  const needsStock = merchantType === 'PHARMACY' || merchantType === 'SUPERMARKET';
+  const isPharmacy = merchantType === 'PHARMACY';
 
   const selectedCategoryName = watch('categoryName');
 
@@ -96,12 +105,21 @@ export default function AddMenuItemScreen(): React.JSX.Element {
         return;
       }
 
+      const stockQty = data.stockQuantity ? parseInt(data.stockQuantity, 10) : undefined;
+      if (needsStock && (!stockQty || stockQty < 0)) {
+        showToast({ type: 'error', message: 'Stock quantity is required' });
+        setLoading(false);
+        return;
+      }
+
       const res = await addMenuItemApi(restaurantId, {
         name: data.name,
         description: data.description,
         price,
         categoryId: data.categoryId || undefined,
         isAvailable: data.isAvailable,
+        ...(needsStock && { stockQuantity: stockQty }),
+        ...(isPharmacy && { requiresPrescription: data.requiresPrescription }),
       });
 
       const newItem = res.data.data?.menuItem ?? (res.data.data as unknown as { id?: string });
@@ -115,7 +133,7 @@ export default function AddMenuItemScreen(): React.JSX.Element {
         }
       }
 
-      showToast({ type: 'success', message: 'Menu item added!' });
+      showToast({ type: 'success', message: `${Item} added!` });
       router.back();
     } catch (error: unknown) {
       const message =
@@ -124,7 +142,7 @@ export default function AddMenuItemScreen(): React.JSX.Element {
         'response' in error &&
         (error as { response?: { data?: { message?: string } } }).response?.data?.message
           ? (error as { response: { data: { message: string } } }).response.data.message
-          : 'Failed to add item';
+          : `Failed to add ${item}`;
       showToast({ type: 'error', message });
     } finally {
       setLoading(false);
@@ -141,7 +159,7 @@ export default function AddMenuItemScreen(): React.JSX.Element {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={colors.navy} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Add Menu Item</Text>
+        <Text style={styles.headerTitle}>Add {Item}</Text>
         <View style={{ width: 32 }} />
       </View>
 
@@ -169,8 +187,8 @@ export default function AddMenuItemScreen(): React.JSX.Element {
           rules={{ required: 'Item name is required' }}
           render={({ field: { onChange, value } }) => (
             <Input
-              label="Item Name"
-              placeholder="e.g. Jollof Rice + Chicken"
+              label={`${Item} Name`}
+              placeholder={`e.g. Jollof Rice + Chicken`}
               value={value}
               onChangeText={onChange}
               error={errors.name?.message}
@@ -210,6 +228,47 @@ export default function AddMenuItemScreen(): React.JSX.Element {
           )}
         />
 
+        {/* Stock Quantity — pharmacy & supermarket */}
+        {needsStock && (
+          <Controller
+            control={control}
+            name="stockQuantity"
+            rules={{ required: 'Stock quantity is required' }}
+            render={({ field: { onChange, value } }) => (
+              <Input
+                label="Stock Quantity"
+                placeholder="e.g. 100"
+                keyboardType="numeric"
+                value={value}
+                onChangeText={onChange}
+                error={errors.stockQuantity?.message}
+              />
+            )}
+          />
+        )}
+
+        {/* Requires Prescription — pharmacy only */}
+        {isPharmacy && (
+          <Controller
+            control={control}
+            name="requiresPrescription"
+            render={({ field: { onChange, value } }) => (
+              <View style={styles.toggleRow}>
+                <View>
+                  <Text style={styles.toggleLabel}>Requires Prescription</Text>
+                  <Text style={styles.toggleHint}>Customer must upload a valid prescription</Text>
+                </View>
+                <Switch
+                  value={value}
+                  onValueChange={onChange}
+                  trackColor={{ false: '#E5E7EB', true: '#BBF7D0' }}
+                  thumbColor={value ? colors.success : colors.muted}
+                />
+              </View>
+            )}
+          />
+        )}
+
         {/* Category picker */}
         {categories.length > 0 && (
           <View style={styles.fieldGroup}>
@@ -245,7 +304,7 @@ export default function AddMenuItemScreen(): React.JSX.Element {
         )}
 
         <Button
-          label="Add to Menu"
+          label={`Add ${Item}`}
           onPress={handleSubmit(onSubmit)}
           loading={loading}
           fullWidth
@@ -315,4 +374,15 @@ const styles = StyleSheet.create({
   dropdownItem: { paddingVertical: 13, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: colors.lightGray },
   dropdownText: { fontFamily: 'DMSans_400Regular', fontSize: 15, color: colors.navy },
   submitBtn: { marginTop: 12 },
+  toggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.lightGray,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  toggleLabel: { fontFamily: 'DMSans_600SemiBold', fontSize: 14, color: colors.navy },
+  toggleHint: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: colors.muted, marginTop: 2 },
 });

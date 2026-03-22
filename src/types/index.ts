@@ -22,7 +22,20 @@ export interface Merchant {
   userId: string;
   businessName?: string;
   isApproved: boolean;
+  merchantType?: 'RESTAURANT' | 'PHARMACY' | 'SUPERMARKET';
 }
+
+export type RestaurantType =
+  | 'FAST_FOOD'
+  | 'LOCAL'
+  | 'CONTINENTAL'
+  | 'PIZZA'
+  | 'GRILL'
+  | 'BAKERY'
+  | 'CAFE'
+  | 'CHINESE'
+  | 'SEAFOOD'
+  | 'VEGETARIAN';
 
 export interface Restaurant {
   id: string;
@@ -45,6 +58,9 @@ export interface Restaurant {
   totalReviews?: number;
   isBusy?: boolean;
   busyMessage?: string | null;
+  restaurantType?: RestaurantType;
+  avgPrepTime?: number;
+  merchant?: { merchantType?: 'RESTAURANT' | 'PHARMACY' | 'SUPERMARKET' };
 }
 
 export interface MenuCategory {
@@ -65,6 +81,8 @@ export interface MenuItem {
   imageUrl?: string | null;
   isAvailable: boolean;
   category?: { id: string; name: string };
+  stockQuantity?: number;
+  requiresPrescription?: boolean;
 }
 
 export type OrderStatus =
@@ -103,7 +121,9 @@ export interface Order {
   updatedAt?: string;
   confirmedAt?: string;
   estimatedPrepTime?: number;
+  deliveryCode?: string;
   cancelReason?: string;
+  cancelledBy?: 'CUSTOMER' | 'MERCHANT' | 'ADMIN';
   items?: OrderItem[];
   orderItems?: OrderItem[];
   restaurant?: Restaurant;
@@ -198,6 +218,8 @@ export interface BankAccount {
   accountNumber: string;
   bankName: string;
   bankCode: string;
+  isVerified?: boolean;
+  recipientCode?: string;
 }
 
 export interface EarningsSummary {
@@ -207,6 +229,7 @@ export interface EarningsSummary {
   today: { revenue: number; orders: number };
   thisWeek: { revenue: number; orders: number };
   thisMonth: { revenue: number; orders: number };
+  commissionRate?: number;
 }
 
 export interface Transaction {
@@ -244,6 +267,7 @@ export interface Bank {
 
 export interface OverviewStats {
   totalOrders: number;
+  deliveredOrders?: number;
   revenue: number;
   completionRate: number;
   cancelledOrders: number;
@@ -261,7 +285,9 @@ export interface ChartDataPoint {
 export interface BestSellerItem {
   menuItemId: string;
   name: string;
+  price?: number;
   totalQuantitySold: number;
+  orderCount?: number;
   totalRevenue: number;
   imageUrl?: string | null;
 }

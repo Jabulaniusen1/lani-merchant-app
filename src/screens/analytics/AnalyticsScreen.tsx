@@ -10,6 +10,7 @@ import EmptyState from '../../components/common/EmptyState';
 import { showToast } from '../../components/common/Toast';
 import useAnalyticsStore from '../../store/analytics.store';
 import useRestaurantStore from '../../store/restaurant.store';
+import useMerchantType from '../../hooks/useMerchantType';
 import { colors } from '../../theme/colors';
 import { shadows } from '../../theme/shadows';
 import { formatCurrency } from '../../utils/formatters';
@@ -28,6 +29,7 @@ export default function AnalyticsScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const { restaurants, activeRestaurant, setActiveRestaurant } = useRestaurantStore();
   const { overview, chartData, bestSellers, peakHours, isLoading, error, fetchAll } = useAnalyticsStore();
+  const { Items, store } = useMerchantType();
   const [period, setPeriod] = useState<Period>('7d');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -110,7 +112,7 @@ export default function AnalyticsScreen(): React.JSX.Element {
         </View>
 
         {!selectedRestaurant ? (
-          <EmptyState icon="📊" title="No restaurant selected" subtitle="Add a restaurant to view analytics." />
+          <EmptyState icon="📊" title={`No ${store} selected`} subtitle={`Add a ${store} to view analytics.`} />
         ) : error && !isLoading ? (
           <View style={styles.errorState}>
             <Ionicons name="warning-outline" size={32} color={colors.warning} />
@@ -133,9 +135,10 @@ export default function AnalyticsScreen(): React.JSX.Element {
               <View style={styles.overviewGrid}>
                 <OverviewCard label="Orders" value={String(overview.totalOrders)} icon="receipt-outline" />
                 <OverviewCard label="Revenue" value={formatCurrency(overview.revenue)} icon="wallet-outline" highlight />
-                <OverviewCard label="Completion Rate" value={`${overview.completionRate}%`} icon="checkmark-circle-outline" />
+                <OverviewCard label="Delivered" value={String(overview.deliveredOrders ?? '-')} icon="checkmark-circle-outline" />
                 <OverviewCard label="Cancelled" value={String(overview.cancelledOrders)} icon="close-circle-outline" />
-                <OverviewCard label="Avg Order Value" value={formatCurrency(overview.avgOrderValue)} icon="trending-up-outline" />
+                <OverviewCard label="Avg Order" value={formatCurrency(overview.avgOrderValue)} icon="trending-up-outline" />
+                <OverviewCard label="Completion" value={`${overview.completionRate}%`} icon="stats-chart-outline" />
               </View>
             ) : null}
 
@@ -173,7 +176,7 @@ export default function AnalyticsScreen(): React.JSX.Element {
 
             {/* Best Sellers */}
             <Card style={styles.card} shadow="sm">
-              <Text style={styles.cardTitle}>Top Items</Text>
+              <Text style={styles.cardTitle}>Top {Items}</Text>
               {isLoading && !refreshing ? (
                 [1, 2, 3].map((i) => (
                   <SkeletonBox key={i} width="100%" height={50} style={{ borderRadius: 8, marginBottom: 8 }} />
@@ -256,7 +259,15 @@ function BestSellerRow({ item, rank, maxSales }: { item: BestSellerItem; rank: n
           <Text style={styles.sellerName} numberOfLines={1}>{item.name}</Text>
           <Text style={styles.sellerRevenue}>{formatCurrency(item.totalRevenue)}</Text>
         </View>
-        <Text style={styles.sellerSold}>{item.totalQuantitySold} sold</Text>
+        <View style={styles.sellerMeta}>
+          <Text style={styles.sellerSold}>{item.totalQuantitySold} sold</Text>
+          {item.price != null && (
+            <Text style={styles.sellerPrice}>{formatCurrency(item.price)} each</Text>
+          )}
+          {item.orderCount != null && (
+            <Text style={styles.sellerOrders}>in {item.orderCount} orders</Text>
+          )}
+        </View>
         <View style={styles.progressTrack}>
           <View style={[styles.progressBar, { width: `${pct * 100}%` }, rank === 0 && styles.progressBarGold]} />
         </View>
@@ -315,7 +326,10 @@ const styles = StyleSheet.create({
   sellerTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
   sellerName: { fontFamily: 'DMSans_600SemiBold', fontSize: 14, color: colors.navy, flex: 1 },
   sellerRevenue: { fontFamily: 'Sora_700Bold', fontSize: 13, color: colors.navy, marginLeft: 8 },
-  sellerSold: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: colors.muted, marginBottom: 6 },
+  sellerMeta: { flexDirection: 'row', gap: 8, alignItems: 'center', marginBottom: 6 },
+  sellerSold: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: colors.muted },
+  sellerPrice: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: colors.muted },
+  sellerOrders: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: colors.muted },
   progressTrack: { height: 6, backgroundColor: colors.lightGray, borderRadius: 3, overflow: 'hidden' },
   progressBar: { height: '100%', backgroundColor: '#FFC999', borderRadius: 3 },
   progressBarGold: { backgroundColor: colors.primary },

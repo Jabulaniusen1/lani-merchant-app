@@ -14,6 +14,7 @@ export interface RegisterData {
   phone: string;
   password: string;
   role?: string;
+  merchantType?: 'RESTAURANT' | 'PHARMACY' | 'SUPERMARKET';
 }
 
 export const loginApi = (

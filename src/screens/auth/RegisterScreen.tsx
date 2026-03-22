@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  KeyboardAvoidingView, Platform, StyleSheet,
+  KeyboardAvoidingView, Platform, StyleSheet, SafeAreaView,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useForm, Controller } from 'react-hook-form';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import useAuthStore from '../../store/auth.store';
@@ -56,6 +57,7 @@ function PasswordStrength({ password }: PasswordStrengthProps): React.JSX.Elemen
 
 export default function RegisterScreen(): React.JSX.Element {
   const router = useRouter();
+  const { merchantType } = useLocalSearchParams<{ merchantType: string }>();
   const { register } = useAuthStore();
   const [loading, setLoading] = useState<boolean>(false);
   const [apiError, setApiError] = useState<string>('');
@@ -78,8 +80,12 @@ export default function RegisterScreen(): React.JSX.Element {
     setLoading(true);
     try {
       const { confirmPassword: _, ...registerData } = data;
-      await register({ ...registerData, email: data.email.toLowerCase() });
-      router.replace('/(auth)/create-restaurant');
+      await register({
+        ...registerData,
+        email: data.email.toLowerCase(),
+        merchantType: (merchantType as 'RESTAURANT' | 'PHARMACY' | 'SUPERMARKET') ?? 'RESTAURANT',
+      });
+      router.replace({ pathname: '/(auth)/create-restaurant', params: { merchantType: merchantType ?? 'RESTAURANT' } });
     } catch (error: unknown) {
       const message =
         error !== null &&
@@ -94,17 +100,34 @@ export default function RegisterScreen(): React.JSX.Element {
     }
   };
 
+  const typeLabel = merchantType === 'PHARMACY' ? 'Pharmacy' : merchantType === 'SUPERMARKET' ? 'Supermarket' : 'Restaurant';
+
   return (
     <KeyboardAvoidingView
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      <SafeAreaView style={styles.safeTop}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={22} color="#0D1B2A" />
+        </TouchableOpacity>
+      </SafeAreaView>
       <ScrollView
         style={styles.flex}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        <View style={styles.typeBadge}>
+          <Ionicons
+            name={merchantType === 'PHARMACY' ? 'medical-outline' : merchantType === 'SUPERMARKET' ? 'cart-outline' : 'restaurant-outline'}
+            size={14}
+            color={merchantType === 'PHARMACY' ? '#10B981' : merchantType === 'SUPERMARKET' ? '#3B82F6' : '#FF6B00'}
+          />
+          <Text style={[styles.typeBadgeText, {
+            color: merchantType === 'PHARMACY' ? '#10B981' : merchantType === 'SUPERMARKET' ? '#3B82F6' : '#FF6B00',
+          }]}>{typeLabel}</Text>
+        </View>
         <Text style={styles.heading}>Create Account</Text>
         <Text style={styles.subheading}>Join thousands of merchants on Lanieats</Text>
 
@@ -248,7 +271,33 @@ export default function RegisterScreen(): React.JSX.Element {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: '#fff' },
-  content: { padding: 24, paddingTop: 60, flexGrow: 1 },
+  safeTop: { backgroundColor: '#fff' },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 24,
+    marginTop: 12,
+  },
+  typeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'flex-start',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginBottom: 12,
+  },
+  typeBadgeText: {
+    fontFamily: 'DMSans_600SemiBold',
+    fontSize: 12,
+  },
+  content: { padding: 24, paddingTop: 16, flexGrow: 1 },
   heading: { fontFamily: 'Sora_700Bold', fontSize: 28, color: colors.navy, marginBottom: 6 },
   subheading: { fontFamily: 'DMSans_400Regular', fontSize: 15, color: colors.muted, marginBottom: 28 },
   row: { flexDirection: 'row', gap: 12 },

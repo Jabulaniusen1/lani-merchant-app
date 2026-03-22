@@ -1,7 +1,7 @@
 import React, { useEffect, useCallback, useRef, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, ScrollView,
-  RefreshControl, StyleSheet,
+  RefreshControl, StyleSheet, Modal, Pressable,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +12,7 @@ import EmptyState from '../../components/common/EmptyState';
 import { showToast } from '../../components/common/Toast';
 import useOrderStore from '../../store/order.store';
 import useRestaurantStore from '../../store/restaurant.store';
+import useMerchantType from '../../hooks/useMerchantType';
 import { getSocket } from '../../services/socket';
 import useSocket from '../../hooks/useSocket';
 import { showNewOrderNotification } from '../../services/notifications';
@@ -23,9 +24,12 @@ export default function OrdersScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { orders, isLoading, activeFilter, fetchOrders, setFilter, addOrder, updateOrderInList, updateOrderStatus } = useOrderStore();
-  const { activeRestaurant, toggleOpen, toggleBusyMode, fetchRestaurants } = useRestaurantStore();
+  const { restaurants, activeRestaurant, toggleOpen, toggleBusyMode, fetchRestaurants } = useRestaurantStore();
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [togglingOpen, setTogglingOpen] = useState<boolean>(false);
+  const [setupChecked, setSetupChecked] = useState<boolean>(false);
+  const [showSetupPrompt, setShowSetupPrompt] = useState<boolean>(false);
+  const { Store, store, isRestaurant } = useMerchantType();
   const newOrderIds = useRef<Set<string>>(new Set());
   useSocket();
 
@@ -38,9 +42,17 @@ export default function OrdersScreen(): React.JSX.Element {
   }, [restaurantId, activeFilter, fetchOrders]);
 
   useEffect(() => {
-    fetchRestaurants();
+    fetchRestaurants().then(() => {
+      setSetupChecked(true);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (setupChecked && restaurants.length === 0) {
+      setShowSetupPrompt(true);
+    }
+  }, [setupChecked, restaurants.length]);
 
   useEffect(() => {
     loadOrders();
@@ -170,8 +182,8 @@ export default function OrdersScreen(): React.JSX.Element {
         )}
       </View>
 
-      {/* Busy Mode Banner */}
-      {activeRestaurant?.isBusy && (
+      {/* Busy Mode Banner — restaurants only */}
+      {isRestaurant && activeRestaurant?.isBusy && (
         <TouchableOpacity
           style={styles.busyBanner}
           onPress={handleDisableBusyMode}
@@ -190,7 +202,7 @@ export default function OrdersScreen(): React.JSX.Element {
         <View style={styles.closedBanner}>
           <Ionicons name="warning-outline" size={16} color={colors.warning} />
           <Text style={styles.closedBannerText}>
-            Your restaurant is currently closed. Customers cannot place orders.
+            Your {store} is currently closed. Customers cannot place orders.
           </Text>
         </View>
       )}
@@ -215,6 +227,68 @@ export default function OrdersScreen(): React.JSX.Element {
           </TouchableOpacity>
         ))}
       </ScrollView>
+
+      {/* Setup prompt modal */}
+      <Modal
+        visible={showSetupPrompt}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowSetupPrompt(false)}>
+          <Pressable style={styles.modalCard} onPress={() => {}}>
+            {/* Icon */}
+            <View style={styles.modalIconWrap}>
+              <Text style={styles.modalIcon}>🏪</Text>
+            </View>
+
+            <Text style={styles.modalTitle}>Complete Your Setup</Text>
+            <Text style={styles.modalSubtitle}>
+              You're almost there! Set up your {store} to start receiving orders on Lanieats.
+            </Text>
+
+            {/* Checklist */}
+            <View style={styles.checklist}>
+              <View style={styles.checkRow}>
+                <View style={[styles.checkCircle, styles.checkDone]}>
+                  <Ionicons name="checkmark" size={13} color="#fff" />
+                </View>
+                <Text style={styles.checkLabelDone}>Account created</Text>
+              </View>
+              <View style={styles.checkConnector} />
+              <View style={styles.checkRow}>
+                <View style={[styles.checkCircle, styles.checkPending]}>
+                  <Ionicons name="storefront-outline" size={13} color={colors.primary} />
+                </View>
+                <View>
+                  <Text style={styles.checkLabel}>Set up your store</Text>
+                  <Text style={styles.checkLabelHint}>Add your store details to go live</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* CTA */}
+            <TouchableOpacity
+              style={styles.setupBtn}
+              onPress={() => {
+                setShowSetupPrompt(false);
+                router.push('/(auth)/create-restaurant');
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.setupBtnText}>Set Up My Store</Text>
+              <Ionicons name="arrow-forward" size={18} color="#fff" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.laterBtn}
+              onPress={() => setShowSetupPrompt(false)}
+            >
+              <Text style={styles.laterBtnText}>I'll do this later</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Orders list */}
       {isLoading && !refreshing ? (
@@ -336,4 +410,105 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   listContent: { padding: 16, flexGrow: 1 },
+  // Setup prompt modal
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 28,
+    paddingBottom: 40,
+  },
+  modalIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: '#FFF3E8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    alignSelf: 'center',
+  },
+  modalIcon: { fontSize: 32 },
+  modalTitle: {
+    fontFamily: 'Sora_700Bold',
+    fontSize: 22,
+    color: colors.navy,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 14,
+    color: colors.muted,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 28,
+  },
+  checklist: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    gap: 0,
+  },
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  checkConnector: {
+    width: 2,
+    height: 20,
+    backgroundColor: '#E5E7EB',
+    marginLeft: 15,
+    marginVertical: 4,
+  },
+  checkCircle: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkDone: { backgroundColor: colors.success },
+  checkPending: { backgroundColor: '#FFF3E8', borderWidth: 1.5, borderColor: colors.primary },
+  checkLabelDone: {
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 14,
+    color: colors.success,
+    textDecorationLine: 'line-through',
+  },
+  checkLabel: {
+    fontFamily: 'DMSans_600SemiBold',
+    fontSize: 14,
+    color: colors.navy,
+  },
+  checkLabelHint: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 1,
+  },
+  setupBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    paddingVertical: 17,
+    marginBottom: 12,
+  },
+  setupBtnText: {
+    fontFamily: 'Sora_700Bold',
+    fontSize: 16,
+    color: '#fff',
+  },
+  laterBtn: { alignItems: 'center', paddingVertical: 8 },
+  laterBtnText: {
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 14,
+    color: colors.muted,
+  },
 });

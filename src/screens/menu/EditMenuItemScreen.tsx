@@ -15,6 +15,7 @@ import { showToast } from '../../components/common/Toast';
 import { getMenuApi, updateMenuItemApi } from '../../api/menu.api';
 import { uploadMenuItemImage } from '../../api/upload.api';
 import useRestaurantStore from '../../store/restaurant.store';
+import useMerchantType from '../../hooks/useMerchantType';
 import { colors } from '../../theme/colors';
 import { formatPriceInput, parsePriceInput } from '../../utils/formatters';
 import type { MenuCategory, MenuItem } from '../../types';
@@ -26,6 +27,8 @@ interface EditMenuItemFormData {
   categoryId: string;
   categoryName: string;
   isAvailable: boolean;
+  stockQuantity: string;
+  requiresPrescription: boolean;
 }
 
 export default function EditMenuItemScreen(): React.JSX.Element {
@@ -33,6 +36,7 @@ export default function EditMenuItemScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { activeRestaurant } = useRestaurantStore();
+  const { Item, item } = useMerchantType();
   const [loading, setLoading] = useState<boolean>(false);
   const [fetchLoading, setFetchLoading] = useState<boolean>(true);
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -50,8 +54,14 @@ export default function EditMenuItemScreen(): React.JSX.Element {
       categoryId: '',
       categoryName: '',
       isAvailable: true,
+      stockQuantity: '',
+      requiresPrescription: false,
     },
   });
+
+  const { merchantType, isRestaurant } = useMerchantType();
+  const needsStock = merchantType === 'PHARMACY' || merchantType === 'SUPERMARKET';
+  const isPharmacy = merchantType === 'PHARMACY';
 
   const selectedCategoryName = watch('categoryName');
   const isAvailable = watch('isAvailable');
@@ -82,6 +92,8 @@ export default function EditMenuItemScreen(): React.JSX.Element {
             categoryId: item.categoryId ?? item.category?.id ?? '',
             categoryName: item.category?.name ?? '',
             isAvailable: item.isAvailable !== false,
+            stockQuantity: item.stockQuantity != null ? String(item.stockQuantity) : '',
+            requiresPrescription: item.requiresPrescription ?? false,
           });
           if (item.imageUrl) setImageUri(item.imageUrl);
         }
@@ -125,14 +137,17 @@ export default function EditMenuItemScreen(): React.JSX.Element {
     setLoading(true);
     try {
       const price = parsePriceInput(data.price);
+      const stockQty = data.stockQuantity ? parseInt(data.stockQuantity, 10) : undefined;
       await updateMenuItemApi(restaurantId, id, {
         name: data.name,
         description: data.description,
         price,
         categoryId: data.categoryId || undefined,
         isAvailable: data.isAvailable,
+        ...(needsStock && stockQty != null && { stockQuantity: stockQty }),
+        ...(isPharmacy && { requiresPrescription: data.requiresPrescription }),
       });
-      showToast({ type: 'success', message: 'Item updated!' });
+      showToast({ type: 'success', message: `${Item} updated!` });
       router.back();
     } catch (error: unknown) {
       const message =
@@ -141,7 +156,7 @@ export default function EditMenuItemScreen(): React.JSX.Element {
         'response' in error &&
         (error as { response?: { data?: { message?: string } } }).response?.data?.message
           ? (error as { response: { data: { message: string } } }).response.data.message
-          : 'Failed to update item';
+          : `Failed to update ${item}`;
       showToast({ type: 'error', message });
     } finally {
       setLoading(false);
@@ -159,7 +174,7 @@ export default function EditMenuItemScreen(): React.JSX.Element {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={colors.navy} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Item</Text>
+        <Text style={styles.headerTitle}>Edit {Item}</Text>
         <View style={{ width: 32 }} />
       </View>
 
@@ -192,7 +207,7 @@ export default function EditMenuItemScreen(): React.JSX.Element {
           name="name"
           rules={{ required: 'Name is required' }}
           render={({ field: { onChange, value } }) => (
-            <Input label="Item Name" value={value} onChangeText={onChange} error={errors.name?.message} />
+            <Input label={`${Item} Name`} value={value} onChangeText={onChange} error={errors.name?.message} />
           )}
         />
 
@@ -247,6 +262,46 @@ export default function EditMenuItemScreen(): React.JSX.Element {
               </TouchableOpacity>
             ))}
           </View>
+        )}
+
+        {/* Stock Quantity — pharmacy & supermarket */}
+        {needsStock && (
+          <Controller
+            control={control}
+            name="stockQuantity"
+            render={({ field: { onChange, value } }) => (
+              <Input
+                label="Stock Quantity"
+                placeholder="e.g. 100"
+                keyboardType="numeric"
+                value={value}
+                onChangeText={onChange}
+                error={errors.stockQuantity?.message}
+              />
+            )}
+          />
+        )}
+
+        {/* Requires Prescription — pharmacy only */}
+        {isPharmacy && (
+          <Controller
+            control={control}
+            name="requiresPrescription"
+            render={({ field: { onChange, value } }) => (
+              <View style={styles.availabilityRow}>
+                <View>
+                  <Text style={styles.availabilityTitle}>Requires Prescription</Text>
+                  <Text style={styles.availabilitySubtitle}>Customer must upload a valid prescription</Text>
+                </View>
+                <Switch
+                  value={value}
+                  onValueChange={onChange}
+                  trackColor={{ false: '#E5E7EB', true: '#BBF7D0' }}
+                  thumbColor={value ? colors.success : colors.muted}
+                />
+              </View>
+            )}
+          />
         )}
 
         {/* Availability toggle */}

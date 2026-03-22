@@ -123,7 +123,7 @@ export default function LoginScreen(): React.JSX.Element {
 
         {/* Register link */}
         <TouchableOpacity
-          onPress={() => router.push('/(auth)/register')}
+          onPress={() => router.push('/(auth)/merchant-type')}
           style={styles.linkRow}
         >
           <Text style={styles.linkText}>
