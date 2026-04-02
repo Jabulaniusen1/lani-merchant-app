@@ -1,35 +1,68 @@
-import React, { useEffect, useCallback, useRef, useState } from 'react';
-import {
-  View, Text, FlatList, TouchableOpacity, ScrollView,
-  RefreshControl, StyleSheet, Modal, Pressable,
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import OrderCard from '../../components/orders/OrderCard';
-import { OrderCardSkeleton } from '../../components/common/SkeletonLoader';
+import { useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  FlatList,
+  Modal, Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import EmptyState from '../../components/common/EmptyState';
+import { OrderCardSkeleton } from '../../components/common/SkeletonLoader';
 import { showToast } from '../../components/common/Toast';
-import useOrderStore from '../../store/order.store';
-import useRestaurantStore from '../../store/restaurant.store';
+import OrderCard from '../../components/orders/OrderCard';
 import useMerchantType from '../../hooks/useMerchantType';
-import { getSocket } from '../../services/socket';
 import useSocket from '../../hooks/useSocket';
 import { showNewOrderNotification } from '../../services/notifications';
+import { getSocket } from '../../services/socket';
+import useAuthStore from '../../store/auth.store';
+import useOrderStore from '../../store/order.store';
+import useRestaurantStore from '../../store/restaurant.store';
 import { colors } from '../../theme/colors';
+
+import type { NewOrderPayload, Order, OrderCancelledPayload, OrderConfirmedPayload, OrderStatus, RiderAssignedPayload } from '../../types';
 import { ORDER_FILTER_TABS } from '../../utils/constants';
-import type { Order, OrderStatus, NewOrderPayload, OrderCancelledPayload, OrderConfirmedPayload, RiderAssignedPayload } from '../../types';
+
+function getApiErrorMessage(error: unknown, fallback: string): string {
+  if (
+    error !== null &&
+    typeof error === 'object' &&
+    'response' in error
+  ) {
+    const responseData = (error as { response?: { data?: { message?: string } } }).response?.data;
+    if (responseData?.message) return responseData.message;
+  }
+
+  if (
+    error !== null &&
+    typeof error === 'object' &&
+    'code' in error &&
+    (error as { code?: string }).code === 'ECONNABORTED'
+  ) {
+    return 'Request timed out. Status may still update shortly.';
+  }
+
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
 
 export default function OrdersScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { user } = useAuthStore();
   const { orders, isLoading, activeFilter, fetchOrders, setFilter, addOrder, updateOrderInList, updateOrderStatus } = useOrderStore();
   const { restaurants, activeRestaurant, toggleOpen, toggleBusyMode, fetchRestaurants } = useRestaurantStore();
+  const merchantApproved = user?.merchant?.isApproved !== false;
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [togglingOpen, setTogglingOpen] = useState<boolean>(false);
   const [setupChecked, setSetupChecked] = useState<boolean>(false);
   const [showSetupPrompt, setShowSetupPrompt] = useState<boolean>(false);
-  const { Store, store, isRestaurant } = useMerchantType();
+  const { store, isRestaurant } = useMerchantType();
   const newOrderIds = useRef<Set<string>>(new Set());
   useSocket();
 
@@ -114,7 +147,7 @@ export default function OrdersScreen(): React.JSX.Element {
     try {
       await toggleOpen(activeRestaurant.id, !activeRestaurant.isOpen);
     } catch {
-      showToast({ type: 'error', message: 'Failed to update restaurant status' });
+      showToast({ type: 'error', message: `Failed to update ${store} status` });
     } finally {
       setTogglingOpen(false);
     }
@@ -138,8 +171,9 @@ export default function OrdersScreen(): React.JSX.Element {
     try {
       await updateOrderStatus(orderId, status, extra);
       showToast({ type: 'success', message: 'Order status updated' });
-    } catch {
-      showToast({ type: 'error', message: 'Failed to update order status' });
+    } catch (error) {
+      const message = getApiErrorMessage(error, 'Failed to update order status');
+      showToast({ type: 'error', message });
     }
   };
 
@@ -147,9 +181,14 @@ export default function OrdersScreen(): React.JSX.Element {
     try {
       await updateOrderStatus(orderId, 'CANCELLED', { cancelReason });
       showToast({ type: 'warning', message: 'Order cancelled' });
-    } catch {
-      showToast({ type: 'error', message: 'Failed to cancel order' });
+    } catch (error) {
+      const message = getApiErrorMessage(error, 'Failed to cancel order');
+      showToast({ type: 'error', message });
     }
+  };
+
+  const handleOrderPress = (orderId: string): void => {
+    router.push(`/(main)/orders/${orderId}`);
   };
 
   const filteredOrders =
@@ -181,6 +220,16 @@ export default function OrdersScreen(): React.JSX.Element {
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Merchant Pending Approval Banner */}
+      {!merchantApproved && (
+        <View style={styles.approvalBanner}>
+          <Ionicons name="time-outline" size={16} color="#92400E" />
+          <Text style={styles.approvalBannerText}>
+            Your merchant account is pending admin approval. You can set up your store in the meantime.
+          </Text>
+        </View>
+      )}
 
       {/* Busy Mode Banner — restaurants only */}
       {isRestaurant && activeRestaurant?.isBusy && (
@@ -239,12 +288,12 @@ export default function OrdersScreen(): React.JSX.Element {
           <Pressable style={styles.modalCard} onPress={() => {}}>
             {/* Icon */}
             <View style={styles.modalIconWrap}>
-              <Text style={styles.modalIcon}>🏪</Text>
+              <Ionicons name="storefront-outline" size={32} color={colors.primary} />
             </View>
 
             <Text style={styles.modalTitle}>Complete Your Setup</Text>
             <Text style={styles.modalSubtitle}>
-              You're almost there! Set up your {store} to start receiving orders on Lanieats.
+              You&apos;re almost there! Set up your {store} to start receiving orders on Lanieats.
             </Text>
 
             {/* Checklist */}
@@ -284,7 +333,7 @@ export default function OrdersScreen(): React.JSX.Element {
               style={styles.laterBtn}
               onPress={() => setShowSetupPrompt(false)}
             >
-              <Text style={styles.laterBtnText}>I'll do this later</Text>
+              <Text style={styles.laterBtnText}>I&apos;ll do this later</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
@@ -298,7 +347,7 @@ export default function OrdersScreen(): React.JSX.Element {
       ) : (
         <FlatList<Order>
           data={filteredOrders}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => item.id ?? String(index)}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -310,7 +359,7 @@ export default function OrdersScreen(): React.JSX.Element {
           }
           ListEmptyComponent={
             <EmptyState
-              icon="📋"
+              icon="clipboard-outline"
               title="No orders yet"
               subtitle={
                 activeFilter === 'ALL'
@@ -323,7 +372,7 @@ export default function OrdersScreen(): React.JSX.Element {
             <OrderCard
               order={item}
               isNew={newOrderIds.current.has(item.id)}
-              onPress={() => router.push(`/(main)/orders/${item.id}`)}
+              onPress={() => { void handleOrderPress(item.id); }}
               onUpdateStatus={handleUpdateStatus}
               onCancel={handleCancel}
             />
@@ -360,6 +409,23 @@ const styles = StyleSheet.create({
   dotOpen: { backgroundColor: colors.success },
   dotClosed: { backgroundColor: colors.error },
   toggleText: { fontFamily: 'Sora_700Bold', fontSize: 12 },
+  approvalBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FEF3C7',
+    borderBottomWidth: 1,
+    borderBottomColor: '#FDE68A',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  approvalBannerText: {
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 13,
+    color: '#92400E',
+    flex: 1,
+    lineHeight: 18,
+  },
   busyBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -433,7 +499,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     alignSelf: 'center',
   },
-  modalIcon: { fontSize: 32 },
   modalTitle: {
     fontFamily: 'Sora_700Bold',
     fontSize: 22,

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Animated, StyleSheet } from 'react-native';
+import { View, Text, Animated, Image, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import useAuthStore from '../../store/auth.store';
 import { colors } from '../../theme/colors';
@@ -51,11 +51,10 @@ export default function SplashScreen(): React.JSX.Element {
           },
         ]}
       >
-        <Animated.View
+        <Animated.Image
+          source={require('../../../assets/images/dark_on_orange.png')}
           style={[styles.logoMark, { transform: [{ scale: pulseAnim }] }]}
-        >
-          <Text style={styles.logoLetter}>L</Text>
-        </Animated.View>
+        />
         <Text style={styles.wordmark}>lanieats</Text>
         <Text style={styles.tagline}>for merchants</Text>
       </Animated.View>
@@ -72,19 +71,11 @@ const styles = StyleSheet.create({
   },
   logoWrapper: { alignItems: 'center' },
   logoMark: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  logoLetter: {
-    fontFamily: 'Sora_700Bold',
-    fontSize: 48,
-    color: '#fff',
-    lineHeight: 56,
+    width: 110,
+    height: 110,
+    borderRadius: 28,
+    marginBottom: 20,
+    resizeMode: 'contain',
   },
   wordmark: {
     fontFamily: 'Sora_700Bold',

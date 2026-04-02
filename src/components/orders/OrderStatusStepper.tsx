@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors } from '../../theme/colors';
+import useMerchantType from '../../hooks/useMerchantType';
 import type { OrderStatus } from '../../types';
 
 interface Step {
@@ -8,10 +9,19 @@ interface Step {
   label: string;
 }
 
-const STEPS: Step[] = [
+const RESTAURANT_STEPS: Step[] = [
   { key: 'PENDING', label: 'Placed' },
   { key: 'CONFIRMED', label: 'Confirmed' },
   { key: 'PREPARING', label: 'Preparing' },
+  { key: 'READY_FOR_PICKUP', label: 'Ready' },
+  { key: 'OUT_FOR_DELIVERY', label: 'On the way' },
+  { key: 'DELIVERED', label: 'Delivered' },
+];
+
+const RETAIL_STEPS: Step[] = [
+  { key: 'PENDING', label: 'Placed' },
+  { key: 'CONFIRMED', label: 'Confirmed' },
+  { key: 'PREPARING', label: 'Processing' },
   { key: 'READY_FOR_PICKUP', label: 'Ready' },
   { key: 'OUT_FOR_DELIVERY', label: 'On the way' },
   { key: 'DELIVERED', label: 'Delivered' },
@@ -31,6 +41,8 @@ interface OrderStatusStepperProps {
 }
 
 export default function OrderStatusStepper({ status }: OrderStatusStepperProps): React.JSX.Element {
+  const { isRestaurant } = useMerchantType();
+  const steps = isRestaurant ? RESTAURANT_STEPS : RETAIL_STEPS;
   const currentIdx = ORDER.indexOf(status);
   if (status === 'CANCELLED') {
     return (
@@ -44,7 +56,7 @@ export default function OrderStatusStepper({ status }: OrderStatusStepperProps):
 
   return (
     <View style={styles.container}>
-      {STEPS.map((step, idx) => {
+      {steps.map((step, idx) => {
         const isCompleted = idx < currentIdx;
         const isCurrent = idx === currentIdx;
         const isFuture = idx > currentIdx;
@@ -60,7 +72,7 @@ export default function OrderStatusStepper({ status }: OrderStatusStepperProps):
                   isFuture && styles.dotFuture,
                 ]}
               />
-              {idx < STEPS.length - 1 && (
+              {idx < steps.length - 1 && (
                 <View
                   style={[
                     styles.line,

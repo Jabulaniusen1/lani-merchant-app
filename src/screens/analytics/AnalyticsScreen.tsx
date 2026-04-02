@@ -23,7 +23,7 @@ const PERIODS: { label: string; value: Period }[] = [
   { label: '30 Days', value: '30d' },
 ];
 
-const MEDALS = ['🥇', '🥈', '🥉'];
+const RANK_COLORS = ['#F59E0B', '#9CA3AF', '#B45309'];
 
 export default function AnalyticsScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
@@ -112,7 +112,7 @@ export default function AnalyticsScreen(): React.JSX.Element {
         </View>
 
         {!selectedRestaurant ? (
-          <EmptyState icon="📊" title={`No ${store} selected`} subtitle={`Add a ${store} to view analytics.`} />
+          <EmptyState icon="bar-chart-outline" title={`No ${store} selected`} subtitle={`Add a ${store} to view analytics.`} />
         ) : error && !isLoading ? (
           <View style={styles.errorState}>
             <Ionicons name="warning-outline" size={32} color={colors.warning} />
@@ -133,12 +133,17 @@ export default function AnalyticsScreen(): React.JSX.Element {
               </View>
             ) : overview ? (
               <View style={styles.overviewGrid}>
-                <OverviewCard label="Orders" value={String(overview.totalOrders)} icon="receipt-outline" />
-                <OverviewCard label="Revenue" value={formatCurrency(overview.revenue)} icon="wallet-outline" highlight />
-                <OverviewCard label="Delivered" value={String(overview.deliveredOrders ?? '-')} icon="checkmark-circle-outline" />
-                <OverviewCard label="Cancelled" value={String(overview.cancelledOrders)} icon="close-circle-outline" />
-                <OverviewCard label="Avg Order" value={formatCurrency(overview.avgOrderValue)} icon="trending-up-outline" />
-                <OverviewCard label="Completion" value={`${overview.completionRate}%`} icon="stats-chart-outline" />
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                {(() => { const changes = (overview as any).changes ?? {}; return (
+                  <>
+                    <OverviewCard label="Orders" value={String(overview.totalOrders)} icon="receipt-outline" change={changes.orders} />
+                    <OverviewCard label="Revenue" value={formatCurrency(overview.revenue)} icon="wallet-outline" highlight change={changes.revenue} />
+                    <OverviewCard label="Delivered" value={String(overview.deliveredOrders ?? '-')} icon="checkmark-circle-outline" change={changes.deliveredOrders} />
+                    <OverviewCard label="Cancelled" value={String(overview.cancelledOrders)} icon="close-circle-outline" change={changes.cancelledOrders} />
+                    <OverviewCard label="Avg Order" value={formatCurrency(overview.avgOrderValue)} icon="trending-up-outline" change={changes.avgOrderValue} />
+                    <OverviewCard label="Completion" value={`${overview.completionRate}%`} icon="stats-chart-outline" change={changes.completionRate} />
+                  </>
+                ); })()}
               </View>
             ) : null}
 
@@ -239,12 +244,24 @@ export default function AnalyticsScreen(): React.JSX.Element {
   );
 }
 
-function OverviewCard({ label, value, icon, highlight }: { label: string; value: string; icon: React.ComponentProps<typeof Ionicons>['name']; highlight?: boolean }): React.JSX.Element {
+function OverviewCard({ label, value, icon, highlight, change }: { label: string; value: string; icon: React.ComponentProps<typeof Ionicons>['name']; highlight?: boolean; change?: number }): React.JSX.Element {
   return (
     <View style={[styles.overviewCard, shadows.sm as object, highlight && styles.overviewCardHighlight]}>
       <Ionicons name={icon} size={20} color={highlight ? colors.primary : colors.muted} />
       <Text style={[styles.overviewValue, highlight && styles.overviewValueHighlight]}>{value}</Text>
       <Text style={styles.overviewLabel}>{label}</Text>
+      {change != null && !isNaN(change) && (
+        <View style={styles.trendRow}>
+          <Ionicons
+            name={change >= 0 ? 'trending-up-outline' : 'trending-down-outline'}
+            size={13}
+            color={change >= 0 ? colors.success : colors.error}
+          />
+          <Text style={[styles.trendText, { color: change >= 0 ? colors.success : colors.error }]}>
+            {Math.abs(change).toFixed(1)}%
+          </Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -253,7 +270,7 @@ function BestSellerRow({ item, rank, maxSales }: { item: BestSellerItem; rank: n
   const pct = maxSales > 0 ? item.totalQuantitySold / maxSales : 0;
   return (
     <View style={styles.sellerRow}>
-      <Text style={styles.sellerMedal}>{MEDALS[rank] ?? `#${rank + 1}`}</Text>
+      <Text style={[styles.sellerMedal, { color: RANK_COLORS[rank] ?? colors.muted }]}>#{rank + 1}</Text>
       <View style={{ flex: 1 }}>
         <View style={styles.sellerTopRow}>
           <Text style={styles.sellerName} numberOfLines={1}>{item.name}</Text>
@@ -311,6 +328,8 @@ const styles = StyleSheet.create({
   overviewValue: { fontFamily: 'Sora_700Bold', fontSize: 18, color: colors.navy },
   overviewValueHighlight: { color: colors.primary },
   overviewLabel: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: colors.muted },
+  trendRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 2 },
+  trendText: { fontFamily: 'DMSans_500Medium', fontSize: 11 },
   card: { marginBottom: 14 },
   cardTitle: { fontFamily: 'Sora_600SemiBold', fontSize: 15, color: colors.navy, marginBottom: 4 },
   chartTotalLabel: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: colors.muted, marginBottom: 8 },

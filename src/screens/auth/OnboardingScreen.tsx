@@ -4,13 +4,14 @@ import {
   Dimensions, StyleSheet, type NativeSyntheticEvent, type NativeScrollEvent,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 
 const { width } = Dimensions.get('window');
 
 interface Slide {
   id: string;
-  emoji: string;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
   title: string;
   subtitle: string;
   bg: string;
@@ -21,7 +22,7 @@ interface Slide {
 const slides: Slide[] = [
   {
     id: '1',
-    emoji: '🍽️',
+    icon: 'restaurant-outline',
     title: 'Manage Your Restaurant',
     subtitle: 'Accept orders, update your menu, and track deliveries — all in one place.',
     bg: colors.primary,
@@ -29,7 +30,7 @@ const slides: Slide[] = [
   },
   {
     id: '2',
-    emoji: '📦',
+    icon: 'cube-outline',
     title: 'Real-Time Orders',
     subtitle: 'Get notified the moment a customer places an order. Never miss a beat.',
     bg: colors.navy,
@@ -37,7 +38,7 @@ const slides: Slide[] = [
   },
   {
     id: '3',
-    emoji: '📊',
+    icon: 'bar-chart-outline',
     title: 'Grow Your Business',
     subtitle: 'Track your performance, manage multiple restaurants, and serve Lagos better.',
     bg: '#fff',
@@ -87,7 +88,7 @@ export default function OnboardingScreen(): React.JSX.Element {
         scrollEventThrottle={16}
         renderItem={({ item }) => (
           <View style={[styles.slide, { backgroundColor: item.bg }]}>
-            <Text style={styles.emoji}>{item.emoji}</Text>
+            <Ionicons name={item.icon} size={80} color={item.textColor} />
             <Text style={[styles.title, { color: item.textColor }]}>{item.title}</Text>
             <Text style={[styles.subtitle, { color: item.id === '3' ? colors.muted : 'rgba(255,255,255,0.85)' }]}>
               {item.subtitle}
@@ -164,7 +165,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingBottom: 180,
   },
-  emoji: { fontSize: 80, marginBottom: 32 },
   title: {
     fontFamily: 'Sora_700Bold',
     fontSize: 28,

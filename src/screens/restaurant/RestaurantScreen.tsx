@@ -23,13 +23,15 @@ export default function RestaurantScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { restaurants, isLoading, fetchRestaurants, toggleOpen, toggleBusyMode } = useRestaurantStore();
-  const { isRestaurant } = useMerchantType();
+  const { isRestaurant, Store, store, Menu } = useMerchantType();
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
   // Busy mode sheet state
   const [busySheetRestaurant, setBusySheetRestaurant] = useState<Restaurant | null>(null);
   const [busyMessage, setBusyMessage] = useState('');
   const [togglingBusy, setTogglingBusy] = useState(false);
+  const storesLabel = isRestaurant ? 'Restaurants' : Store === 'Pharmacy' ? 'Pharmacies' : 'Supermarkets';
+  const storesLabelLower = storesLabel.toLowerCase();
 
   useEffect(() => {
     fetchRestaurants();
@@ -46,7 +48,7 @@ export default function RestaurantScreen(): React.JSX.Element {
     try {
       await toggleOpen(restaurant.id, !restaurant.isOpen);
     } catch {
-      showToast({ type: 'error', message: 'Failed to update restaurant status' });
+      showToast({ type: 'error', message: `Failed to update ${store} status` });
     }
   };
 
@@ -85,7 +87,7 @@ export default function RestaurantScreen(): React.JSX.Element {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>My Restaurants</Text>
+        <Text style={styles.title}>My {storesLabel}</Text>
       </View>
 
       <ScrollView
@@ -101,10 +103,10 @@ export default function RestaurantScreen(): React.JSX.Element {
       >
         {restaurants.length === 0 ? (
           <EmptyState
-            icon="🏪"
-            title="No restaurants yet"
-            subtitle="Add your first restaurant to start receiving orders from customers."
-            actionLabel="Add Restaurant"
+            icon="storefront-outline"
+            title={`No ${storesLabelLower} yet`}
+            subtitle={`Add your first ${store} to start receiving orders from customers.`}
+            actionLabel={`Add ${Store}`}
             onAction={() => router.push('/(main)/restaurant/create')}
           />
         ) : (
@@ -115,7 +117,7 @@ export default function RestaurantScreen(): React.JSX.Element {
                   <View style={styles.pendingBanner}>
                     <Ionicons name="time-outline" size={15} color={colors.warning} />
                     <Text style={styles.pendingText}>
-                      Pending admin approval. Your restaurant will go live once approved.
+                      Pending admin approval. Your {store} will go live once approved.
                     </Text>
                   </View>
                 )}
@@ -123,7 +125,7 @@ export default function RestaurantScreen(): React.JSX.Element {
                 {item.isApproved && !item.isOpen && (
                   <View style={styles.infoBanner}>
                     <Ionicons name="information-circle-outline" size={15} color={colors.muted} />
-                    <Text style={styles.infoText}>Your restaurant is currently closed.</Text>
+                    <Text style={styles.infoText}>Your {store} is currently closed.</Text>
                   </View>
                 )}
 
@@ -157,14 +159,14 @@ export default function RestaurantScreen(): React.JSX.Element {
 
                 <View style={styles.restaurantActions}>
                   <Button
-                    label="Edit Restaurant"
+                    label={`Edit ${Store}`}
                     variant="outline"
                     size="sm"
                     onPress={() => router.push(`/(main)/restaurant/edit/${item.id}`)}
                     style={styles.actionBtn}
                   />
                   <Button
-                    label="Manage Menu →"
+                    label={`Manage ${Menu} →`}
                     variant="primary"
                     size="sm"
                     onPress={() => router.push('/(main)/menu')}
@@ -212,7 +214,9 @@ export default function RestaurantScreen(): React.JSX.Element {
               placeholderTextColor={colors.muted}
               multiline
               numberOfLines={2}
+              maxLength={100}
             />
+            <Text style={styles.charCounter}>{busyMessage.length}/100</Text>
 
             <Text style={styles.quickLabel}>Quick options:</Text>
             <View style={styles.quickRow}>
@@ -353,6 +357,7 @@ const styles = StyleSheet.create({
     padding: 12, fontFamily: 'DMSans_400Regular', fontSize: 14, color: colors.navy,
     textAlignVertical: 'top', minHeight: 64, marginBottom: 16,
   },
+  charCounter: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: colors.muted, textAlign: 'right', marginTop: -12, marginBottom: 12 },
   quickLabel: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: colors.muted, marginBottom: 8 },
   quickRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
   quickPill: {

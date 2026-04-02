@@ -49,5 +49,6 @@ export const uploadMenuItemImage = async (
     buildImageFormData(uri, 'item.jpg'),
     { headers: multipartHeaders }
   );
-  return res.data.data.menuItem as MenuItem;
+  // API returns data.product (docs); fall back to data.menuItem for safety
+  return (res.data.data?.product ?? res.data.data?.menuItem ?? res.data.data) as MenuItem;
 };

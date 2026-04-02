@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  Linking, StyleSheet,
+  Linking, Modal, TextInput, StyleSheet,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,6 +13,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import OrderStatusStepper from '../../components/orders/OrderStatusStepper';
 import { showToast } from '../../components/common/Toast';
 import { getOrderDetailApi } from '../../api/order.api';
+import useMerchantType from '../../hooks/useMerchantType';
 import useOrderStore from '../../store/order.store';
 import { colors } from '../../theme/colors';
 import { shadows } from '../../theme/shadows';
@@ -27,11 +28,33 @@ export default function OrderDetailScreen(): React.JSX.Element {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [updating, setUpdating] = useState<boolean>(false);
+  const { isRestaurant } = useMerchantType();
+
+  // Cancel sheet state
+  const [showCancelSheet, setShowCancelSheet] = useState(false);
+  const [selectedReason, setSelectedReason] = useState('');
+  const [additionalNote, setAdditionalNote] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+
+  // Prep time sheet state
+  const [showPrepSheet, setShowPrepSheet] = useState(false);
+  const [selectedPrepTime, setSelectedPrepTime] = useState<number | null>(null);
+  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [customPrepTime, setCustomPrepTime] = useState('');
+  const [preparingSubmit, setPreparingSubmit] = useState(false);
+
+  const CANCEL_REASONS = isRestaurant
+    ? ['Item(s) out of stock', 'Restaurant closing early', 'Too busy to fulfil this order', 'Customer requested cancellation', 'Technical issue', 'Other']
+    : ['Product(s) out of stock', 'Store closing early', 'Unable to process this order now', 'Customer requested cancellation', 'Technical issue', 'Other'];
+
+  const PREP_TIMES = [10, 15, 20, 30, 45, 60];
 
   const fetchOrder = async (): Promise<void> => {
     try {
       const res = await getOrderDetailApi(id);
-      setOrder(res.data.data);
+      const data = res.data.data as unknown as { order?: Order } | Order;
+      const order = (data as { order?: Order }).order ?? (data as Order);
+      setOrder(order);
     } catch {
       showToast({ type: 'error', message: 'Failed to load order details' });
     } finally {
@@ -44,16 +67,42 @@ export default function OrderDetailScreen(): React.JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  const handleUpdateStatus = async (nextStatus: OrderStatus): Promise<void> => {
+  const handleUpdateStatus = async (nextStatus: OrderStatus, extra?: { cancelReason?: string; estimatedPrepTime?: number }): Promise<void> => {
     setUpdating(true);
     try {
-      await updateOrderStatus(id, nextStatus);
+      await updateOrderStatus(id, nextStatus, extra);
       setOrder((prev) => prev ? { ...prev, status: nextStatus } : prev);
       showToast({ type: 'success', message: 'Order status updated' });
     } catch {
       showToast({ type: 'error', message: 'Failed to update status' });
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const handleCancelSubmit = async (): Promise<void> => {
+    if (!selectedReason) return;
+    const reason = additionalNote.trim()
+      ? `${selectedReason} — ${additionalNote.trim()}`
+      : selectedReason;
+    setCancelling(true);
+    try {
+      await handleUpdateStatus('CANCELLED', { cancelReason: reason });
+      setShowCancelSheet(false);
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  const handlePrepSubmit = async (): Promise<void> => {
+    const prepTime = showCustomInput ? parseInt(customPrepTime, 10) : selectedPrepTime;
+    if (!prepTime || prepTime <= 0) return;
+    setPreparingSubmit(true);
+    try {
+      await handleUpdateStatus('PREPARING', { estimatedPrepTime: prepTime });
+      setShowPrepSheet(false);
+    } finally {
+      setPreparingSubmit(false);
     }
   };
 
@@ -69,8 +118,8 @@ export default function OrderDetailScreen(): React.JSX.Element {
   const getActionLabel = (status: OrderStatus): string => {
     switch (status) {
       case 'PENDING':
-      case 'CONFIRMED': return 'Start Preparing';
-      case 'PREPARING': return 'Mark Ready for Pickup';
+      case 'CONFIRMED': return isRestaurant ? 'Start Preparing' : 'Start Processing';
+      case 'PREPARING': return isRestaurant ? 'Mark Ready for Pickup' : 'Mark Ready for Dispatch';
       default: return '';
     }
   };
@@ -130,11 +179,17 @@ export default function OrderDetailScreen(): React.JSX.Element {
               <Text style={[styles.infoText, { color: colors.primary }]}>{customer.phone}</Text>
             </TouchableOpacity>
           )}
+          {order.note ? (
+            <View style={styles.noteBox}>
+              <Ionicons name="chatbubble-ellipses-outline" size={14} color={colors.primary} />
+              <Text style={styles.noteText}>{order.note}</Text>
+            </View>
+          ) : null}
         </Card>
 
         {/* Order Items */}
         <Card style={styles.card} shadow="md">
-          <Text style={styles.sectionTitle}>Order Items</Text>
+          <Text style={styles.sectionTitle}>{isRestaurant ? 'Order Items' : 'Order Products'}</Text>
           {items.map((item, i) => (
             <View key={i} style={styles.itemRow}>
               <View style={styles.itemLeft}>
@@ -146,30 +201,6 @@ export default function OrderDetailScreen(): React.JSX.Element {
               </Text>
             </View>
           ))}
-        </Card>
-
-        {/* Price Breakdown */}
-        <Card style={styles.card} shadow="md">
-          <Text style={styles.sectionTitle}>Price Breakdown</Text>
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Subtotal</Text>
-            <Text style={styles.priceValue}>{formatCurrency(order.subtotal ?? 0)}</Text>
-          </View>
-          <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Delivery Fee</Text>
-            <Text style={styles.priceValue}>{formatCurrency(order.deliveryFee ?? 0)}</Text>
-          </View>
-          {order.serviceCharge > 0 && (
-            <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>Service Charge</Text>
-              <Text style={styles.priceValue}>{formatCurrency(order.serviceCharge)}</Text>
-            </View>
-          )}
-          <View style={styles.divider} />
-          <View style={styles.priceRow}>
-            <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValue}>{formatCurrency(order.total ?? order.totalAmount ?? 0)}</Text>
-          </View>
         </Card>
 
         {/* Delivery Address */}
@@ -192,7 +223,8 @@ export default function OrderDetailScreen(): React.JSX.Element {
           <Card style={styles.card} shadow="md">
             <Text style={styles.sectionTitle}>Rider Info</Text>
             <View style={styles.infoRow}>
-              <Text style={styles.infoText}>🏍️ {rider.firstName} {rider.lastName}</Text>
+              <Ionicons name="bicycle-outline" size={16} color={colors.navy} style={{ marginRight: 6 }} />
+              <Text style={styles.infoText}>{rider.firstName} {rider.lastName}</Text>
             </View>
             {rider.phone && (
               <TouchableOpacity
@@ -234,7 +266,11 @@ export default function OrderDetailScreen(): React.JSX.Element {
               <Button
                 label="Cancel Order"
                 variant="outline"
-                onPress={() => handleUpdateStatus('CANCELLED')}
+                onPress={() => {
+                  setSelectedReason('');
+                  setAdditionalNote('');
+                  setShowCancelSheet(true);
+                }}
                 loading={updating}
                 style={styles.actionBtn}
               />
@@ -247,7 +283,17 @@ export default function OrderDetailScreen(): React.JSX.Element {
               <Button
                 label={getActionLabel(order.status)}
                 variant="primary"
-                onPress={() => handleUpdateStatus(nextStatus)}
+                onPress={() => {
+                  const isStartPreparing = order.status === 'PENDING' || order.status === 'CONFIRMED';
+                  if (isStartPreparing) {
+                    setSelectedPrepTime(null);
+                    setCustomPrepTime('');
+                    setShowCustomInput(false);
+                    setShowPrepSheet(true);
+                  } else {
+                    handleUpdateStatus(nextStatus);
+                  }
+                }}
                 loading={updating}
                 style={styles.actionBtn}
               />
@@ -255,6 +301,167 @@ export default function OrderDetailScreen(): React.JSX.Element {
           </View>
         )}
       </ScrollView>
+
+      {/* Cancel Reason Sheet */}
+      <Modal
+        visible={showCancelSheet}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCancelSheet(false)}
+      >
+        <TouchableOpacity
+          style={styles.overlay}
+          activeOpacity={1}
+          onPress={() => setShowCancelSheet(false)}
+        >
+          <View style={styles.sheet} onStartShouldSetResponder={() => true}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Cancel Order</Text>
+            <View style={styles.sheetDivider} />
+            <Text style={styles.sheetSubtitle}>Why are you cancelling?</Text>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={styles.reasonsScroll}>
+              {CANCEL_REASONS.map((reason) => (
+                <TouchableOpacity
+                  key={reason}
+                  style={styles.reasonRow}
+                  onPress={() => {
+                    setSelectedReason(reason);
+                    if (reason !== 'Other') setAdditionalNote('');
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.radio, selectedReason === reason && styles.radioSelected]}>
+                    {selectedReason === reason && <View style={styles.radioDot} />}
+                  </View>
+                  <Text style={[styles.reasonText, selectedReason === reason && styles.reasonTextSelected]}>
+                    {reason}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+
+              <TextInput
+                style={styles.noteInput}
+                placeholder="Additional notes (optional)..."
+                placeholderTextColor={colors.muted}
+                value={additionalNote}
+                onChangeText={setAdditionalNote}
+                multiline
+                numberOfLines={3}
+              />
+            </ScrollView>
+
+            <View style={styles.sheetActions}>
+              <Button
+                label="Keep Order"
+                variant="outline"
+                size="sm"
+                onPress={() => setShowCancelSheet(false)}
+                style={{ flex: 1 }}
+              />
+              <Button
+                label="Cancel Order"
+                variant="danger"
+                size="sm"
+                onPress={handleCancelSubmit}
+                loading={cancelling}
+                disabled={!selectedReason}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Prep Time Sheet */}
+      <Modal
+        visible={showPrepSheet}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPrepSheet(false)}
+      >
+        <TouchableOpacity
+          style={styles.overlay}
+          activeOpacity={1}
+          onPress={() => setShowPrepSheet(false)}
+        >
+          <View style={styles.sheet} onStartShouldSetResponder={() => true}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>
+              {isRestaurant ? 'Start Preparing' : 'Start Processing'}
+            </Text>
+            <View style={styles.sheetDivider} />
+            <Text style={styles.sheetSubtitle}>
+              {isRestaurant ? 'How long will this take?' : 'How long until this order is ready?'}
+            </Text>
+
+            <View style={styles.prepGrid}>
+              {PREP_TIMES.map((t) => (
+                <TouchableOpacity
+                  key={t}
+                  style={[
+                    styles.prepPill,
+                    !showCustomInput && selectedPrepTime === t && styles.prepPillSelected,
+                  ]}
+                  onPress={() => {
+                    setSelectedPrepTime(t);
+                    setShowCustomInput(false);
+                    setCustomPrepTime('');
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.prepPillText, !showCustomInput && selectedPrepTime === t && styles.prepPillTextSelected]}>
+                    {t} min
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={[styles.prepPill, showCustomInput && styles.prepPillSelected]}
+                onPress={() => { setShowCustomInput(true); setSelectedPrepTime(null); }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.prepPillText, showCustomInput && styles.prepPillTextSelected]}>Custom</Text>
+              </TouchableOpacity>
+            </View>
+
+            {showCustomInput && (
+              <View style={styles.customInputRow}>
+                <TextInput
+                  style={styles.customInput}
+                  value={customPrepTime}
+                  onChangeText={(t) => setCustomPrepTime(t.replace(/\D/g, ''))}
+                  keyboardType="numeric"
+                  placeholder="Enter minutes"
+                  placeholderTextColor={colors.muted}
+                  autoFocus
+                />
+                <Text style={styles.customInputSuffix}>min</Text>
+              </View>
+            )}
+
+            <Text style={styles.prepNote}>Customer and rider will see this estimate.</Text>
+
+            <View style={styles.sheetActions}>
+              <Button
+                label="Cancel"
+                variant="outline"
+                size="sm"
+                onPress={() => setShowPrepSheet(false)}
+                style={{ flex: 1 }}
+              />
+              <Button
+                label={isRestaurant ? 'Confirm — Start Preparing' : 'Confirm — Start Processing'}
+                variant="primary"
+                size="sm"
+                onPress={handlePrepSubmit}
+                loading={preparingSubmit}
+                disabled={showCustomInput ? !customPrepTime : !selectedPrepTime}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -312,4 +519,58 @@ const styles = StyleSheet.create({
   },
   waitingText: { fontFamily: 'DMSans_500Medium', fontSize: 14, color: colors.warning },
   errorText: { fontFamily: 'DMSans_400Regular', fontSize: 16, color: colors.muted, textAlign: 'center', marginTop: 40 },
+  noteBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginTop: 10,
+    backgroundColor: '#FFF7ED',
+    borderRadius: 8,
+    padding: 10,
+  },
+  noteText: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: '#92400E', flex: 1, lineHeight: 18 },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 24, paddingBottom: 36, maxHeight: '85%',
+  },
+  sheetHandle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: colors.lightGray, alignSelf: 'center', marginBottom: 16,
+  },
+  sheetTitle: { fontFamily: 'Sora_700Bold', fontSize: 18, color: colors.navy, marginBottom: 12 },
+  sheetDivider: { height: 1, backgroundColor: colors.lightGray, marginBottom: 14 },
+  sheetSubtitle: { fontFamily: 'DMSans_500Medium', fontSize: 14, color: '#374151', marginBottom: 12 },
+  sheetActions: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  reasonsScroll: { maxHeight: 300 },
+  reasonRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
+  radio: {
+    width: 20, height: 20, borderRadius: 10,
+    borderWidth: 2, borderColor: colors.lightGray,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  radioSelected: { borderColor: colors.primary },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary },
+  reasonText: { fontFamily: 'DMSans_400Regular', fontSize: 15, color: '#374151', flex: 1 },
+  reasonTextSelected: { fontFamily: 'DMSans_600SemiBold', color: colors.navy },
+  noteInput: {
+    borderWidth: 1.5, borderColor: colors.lightGray, borderRadius: 12,
+    padding: 12, fontFamily: 'DMSans_400Regular', fontSize: 14, color: colors.navy,
+    textAlignVertical: 'top', minHeight: 72, marginTop: 12, marginBottom: 4,
+  },
+  prepGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
+  prepPill: {
+    paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20,
+    borderWidth: 1.5, borderColor: colors.lightGray, backgroundColor: '#fff',
+  },
+  prepPillSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
+  prepPillText: { fontFamily: 'DMSans_500Medium', fontSize: 14, color: colors.muted },
+  prepPillTextSelected: { color: '#fff' },
+  customInputRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12,
+    borderWidth: 1.5, borderColor: colors.primary, borderRadius: 12, paddingHorizontal: 16,
+  },
+  customInput: { flex: 1, fontFamily: 'Sora_700Bold', fontSize: 20, color: colors.navy, paddingVertical: 12 },
+  customInputSuffix: { fontFamily: 'DMSans_400Regular', fontSize: 14, color: colors.muted },
+  prepNote: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: colors.muted, textAlign: 'center', marginBottom: 4 },
 });

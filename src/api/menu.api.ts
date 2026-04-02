@@ -39,6 +39,11 @@ export const toggleMenuItemAvailabilityApi = (
 ): Promise<AxiosResponse<ApiResponse<{ menuItem: MenuItem }>>> =>
   client.put(`/restaurants/${restaurantId}/menu/${itemId}`, { isAvailable });
 
+export const getCategoriesApi = (
+  restaurantId: string
+): Promise<AxiosResponse<ApiResponse<{ categories: MenuCategory[] }>>> =>
+  client.get(`/restaurants/${restaurantId}/menu/categories`);
+
 export const addCategoryApi = (
   restaurantId: string,
   name: string

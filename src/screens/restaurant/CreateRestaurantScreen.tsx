@@ -90,6 +90,10 @@ export default function CreateRestaurantScreen({ isFirstTime = true }: CreateRes
   };
 
   const onSubmit = async (data: CreateRestaurantFormData): Promise<void> => {
+    if (data.closingTime <= data.openingTime) {
+      showToast({ type: 'error', message: 'Closing time must be after opening time' });
+      return;
+    }
     setLoading(true);
     try {
       await createRestaurant({ ...data, ...(restaurantType ? { restaurantType } : {}) });
@@ -130,9 +134,9 @@ export default function CreateRestaurantScreen({ isFirstTime = true }: CreateRes
         </Text>
 
         <View style={styles.infoBanner}>
-          <Ionicons name="information-circle-outline" size={18} color={colors.blue} />
+          <Ionicons name="information-circle-outline" size={18} color={colors.primary} />
           <Text style={styles.infoText}>
-            Your restaurant will be reviewed by our team before going live.
+            {`Your ${labels.noun.toLowerCase()} will be reviewed by our team before going live.`}
           </Text>
         </View>
 
@@ -300,7 +304,7 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 20,
   },
-  infoText: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: colors.blue, flex: 1, lineHeight: 20 },
+  infoText: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: colors.primary, flex: 1, lineHeight: 20 },
   charCount: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: colors.muted, textAlign: 'right', marginTop: -12, marginBottom: 16 },
   fieldGroup: { marginBottom: 16 },
   fieldLabel: { fontFamily: 'DMSans_500Medium', fontSize: 14, color: '#374151', marginBottom: 6 },

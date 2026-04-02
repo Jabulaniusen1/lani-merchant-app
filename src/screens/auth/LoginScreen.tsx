@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity,
+  View, Text, Image, ScrollView, TouchableOpacity,
   KeyboardAvoidingView, Platform, StyleSheet,
 } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
@@ -59,9 +59,10 @@ export default function LoginScreen(): React.JSX.Element {
       >
         {/* Logo */}
         <View style={styles.logoRow}>
-          <View style={styles.logoMark}>
-            <Text style={styles.logoLetter}>L</Text>
-          </View>
+          <Image
+            source={require('../../../assets/images/dark_on_orange.png')}
+            style={styles.logoMark}
+          />
           <Text style={styles.logoText}>Merchant Portal</Text>
         </View>
 
@@ -109,6 +110,13 @@ export default function LoginScreen(): React.JSX.Element {
             )}
           />
 
+          <TouchableOpacity
+            onPress={() => router.push('/(auth)/forgot-password')}
+            style={styles.forgotRow}
+          >
+            <Text style={styles.forgotText}>Forgot Password?</Text>
+          </TouchableOpacity>
+
           {apiError ? <Text style={styles.apiError}>{apiError}</Text> : null}
 
           <Button
@@ -153,11 +161,8 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    resizeMode: 'contain',
   },
-  logoLetter: { fontFamily: 'Sora_700Bold', fontSize: 20, color: '#fff', lineHeight: 24 },
   logoText: { fontFamily: 'DMSans_600SemiBold', fontSize: 15, color: colors.navy },
   heading: {
     fontFamily: 'Sora_700Bold',
@@ -180,6 +185,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   submitBtn: { marginTop: 8 },
+  forgotRow: { alignSelf: 'flex-end', marginTop: 4, marginBottom: 4 },
+  forgotText: { fontFamily: 'DMSans_500Medium', fontSize: 13, color: colors.primary },
   linkRow: { alignItems: 'center', marginTop: 24 },
   linkText: { fontFamily: 'DMSans_400Regular', fontSize: 14, color: colors.muted },
   linkBold: { fontFamily: 'DMSans_600SemiBold', color: colors.primary },

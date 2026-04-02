@@ -34,6 +34,8 @@ const useRestaurantStore = create<RestaurantState>((set, get) => ({
       if (!get().activeRestaurant && restaurants.length > 0) {
         set({ activeRestaurant: restaurants[0] });
       }
+    } catch {
+      // ignore — keep existing state
     } finally {
       set({ isLoading: false });
     }

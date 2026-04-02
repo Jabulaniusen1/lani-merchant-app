@@ -16,6 +16,8 @@ import type { Bank } from '../../types';
 
 type Step = 'select_bank' | 'enter_account' | 'confirm';
 
+let _cachedBanks: Bank[] | null = null;
+
 export default function BankAccountScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -33,8 +35,17 @@ export default function BankAccountScreen(): React.JSX.Element {
   const [verifyError, setVerifyError] = useState('');
 
   useEffect(() => {
+    if (_cachedBanks) {
+      setBanks(_cachedBanks);
+      setLoadingBanks(false);
+      return;
+    }
     getBanksApi()
-      .then((res) => setBanks(res.data.data.banks ?? []))
+      .then((res) => {
+        const list = res.data.data.banks ?? [];
+        _cachedBanks = list;
+        setBanks(list);
+      })
       .catch(() => showToast({ type: 'error', message: 'Failed to load banks' }))
       .finally(() => setLoadingBanks(false));
   }, []);

@@ -8,15 +8,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Button from '../../components/common/Button';
 import { showToast } from '../../components/common/Toast';
-import { requestPayoutApi } from '../../api/finance.api';
+import { requestPayoutApi, getPayoutConfigApi } from '../../api/finance.api';
 import useFinanceStore from '../../store/finance.store';
 import { colors } from '../../theme/colors';
 import { shadows } from '../../theme/shadows';
 import { formatCurrency } from '../../utils/formatters';
 
-const MIN_PAYOUT = 1000;
-
-function maskAccount(accountNumber: string): string {
+function maskAccount(accountNumber?: string): string {
+  if (!accountNumber) return '****';
   return '****' + accountNumber.slice(-4);
 }
 
@@ -28,17 +27,24 @@ export default function PayoutRequestScreen(): React.JSX.Element {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [payoutResult, setPayoutResult] = useState<{ amount: number } | null>(null);
+  const [minPayout, setMinPayout] = useState(1000);
 
   useEffect(() => {
-    fetchEarnings();
-    fetchBankAccount();
+    void fetchEarnings();
+    void fetchBankAccount();
+    getPayoutConfigApi()
+      .then((res) => {
+        const config = res.data.data;
+        if (config?.minPayout) setMinPayout(config.minPayout);
+      })
+      .catch(() => { /* use default */ });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const availableBalance = earnings?.availableBalance ?? 0;
   const amountNum = parseInt(amount.replace(/\D/g, ''), 10) || 0;
   const remainingBalance = availableBalance - amountNum;
-  const isValid = amountNum >= MIN_PAYOUT && amountNum <= availableBalance && !!bankAccount;
+  const isValid = amountNum >= minPayout && amountNum <= availableBalance && !!bankAccount;
 
   const handleAmountChange = (text: string): void => {
     const digits = text.replace(/\D/g, '');
@@ -165,7 +171,7 @@ export default function PayoutRequestScreen(): React.JSX.Element {
                     <Text style={styles.withdrawAllText}>All</Text>
                   </TouchableOpacity>
                 </View>
-                <Text style={styles.minNote}>Minimum withdrawal: {formatCurrency(MIN_PAYOUT)}</Text>
+                <Text style={styles.minNote}>Minimum withdrawal: {formatCurrency(minPayout)}</Text>
               </View>
 
               {/* Bank Account Card */}
@@ -206,8 +212,8 @@ export default function PayoutRequestScreen(): React.JSX.Element {
                 fullWidth
                 style={{ marginTop: 24 }}
               />
-              {amountNum > 0 && amountNum < MIN_PAYOUT && (
-                <Text style={styles.validationError}>Minimum withdrawal is {formatCurrency(MIN_PAYOUT)}</Text>
+              {amountNum > 0 && amountNum < minPayout && (
+                <Text style={styles.validationError}>Minimum withdrawal is {formatCurrency(minPayout)}</Text>
               )}
               {amountNum > availableBalance && (
                 <Text style={styles.validationError}>Amount exceeds available balance</Text>

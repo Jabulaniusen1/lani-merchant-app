@@ -83,6 +83,8 @@ const useFinanceStore = create<FinanceState>((set, get) => ({
       const res = await getEarningsSummaryApi();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       set({ earnings: normalizeEarnings(res.data.data as any) });
+    } catch {
+      // ignore — UI shows zeros
     } finally {
       set({ isLoading: false });
     }
@@ -120,17 +122,25 @@ const useFinanceStore = create<FinanceState>((set, get) => ({
   },
 
   fetchPayouts: async (): Promise<void> => {
-    const res = await getPayoutHistoryApi();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const raw = res.data.data as any;
-    set({ payouts: raw.payouts ?? raw ?? [] });
+    try {
+      const res = await getPayoutHistoryApi();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const raw = res.data.data as any;
+      set({ payouts: raw.payouts ?? raw ?? [] });
+    } catch {
+      set({ payouts: [] });
+    }
   },
 
   fetchBankAccount: async (): Promise<void> => {
-    const res = await getMyBankAccountApi();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const raw = res.data.data as any;
-    set({ bankAccount: raw.bankAccount ?? raw ?? null });
+    try {
+      const res = await getMyBankAccountApi();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const raw = res.data.data as any;
+      set({ bankAccount: raw.bankAccount ?? raw ?? null });
+    } catch {
+      // ignore — null is the safe default
+    }
   },
 
   setBankAccount: (account: BankAccount | null): void => set({ bankAccount: account }),

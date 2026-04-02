@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  KeyboardAvoidingView, Platform, StyleSheet, SafeAreaView,
+  KeyboardAvoidingView, Platform, StyleSheet, SafeAreaView, Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useForm, Controller } from 'react-hook-form';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
+import { showToast } from '../../components/common/Toast';
 import useAuthStore from '../../store/auth.store';
 import { colors } from '../../theme/colors';
 
@@ -61,6 +63,9 @@ export default function RegisterScreen(): React.JSX.Element {
   const { register } = useAuthStore();
   const [loading, setLoading] = useState<boolean>(false);
   const [apiError, setApiError] = useState<string>('');
+  const [isBusinessRegistered, setIsBusinessRegistered] = useState<boolean>(false);
+  const [cacDocumentUri, setCacDocumentUri] = useState<string | null>(null);
+  const [cacDocumentName, setCacDocumentName] = useState<string | null>(null);
 
   const { control, handleSubmit, watch, formState: { errors } } = useForm<RegisterFormData>({
     defaultValues: {
@@ -75,8 +80,30 @@ export default function RegisterScreen(): React.JSX.Element {
 
   const password = watch('password');
 
+  const pickCacDocument = async (): Promise<void> => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      showToast({ type: 'error', message: 'Permission required to pick a photo' });
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: 'images',
+      allowsEditing: false,
+      quality: 0.9,
+    });
+    if (!result.canceled && result.assets[0]) {
+      setCacDocumentUri(result.assets[0].uri);
+      const filename = result.assets[0].uri.split('/').pop() ?? 'cac-document.jpg';
+      setCacDocumentName(filename);
+    }
+  };
+
   const onSubmit = async (data: RegisterFormData): Promise<void> => {
     setApiError('');
+    if (isBusinessRegistered && !cacDocumentUri) {
+      setApiError('Please upload your CAC registration document');
+      return;
+    }
     setLoading(true);
     try {
       const { confirmPassword: _, ...registerData } = data;
@@ -84,6 +111,8 @@ export default function RegisterScreen(): React.JSX.Element {
         ...registerData,
         email: data.email.toLowerCase(),
         merchantType: (merchantType as 'RESTAURANT' | 'PHARMACY' | 'SUPERMARKET') ?? 'RESTAURANT',
+        isBusinessRegistered,
+        cacDocumentUri: isBusinessRegistered ? (cacDocumentUri ?? undefined) : undefined,
       });
       router.replace({ pathname: '/(auth)/create-restaurant', params: { merchantType: merchantType ?? 'RESTAURANT' } });
     } catch (error: unknown) {
@@ -245,6 +274,33 @@ export default function RegisterScreen(): React.JSX.Element {
           )}
         />
 
+        {/* CAC Registration Toggle */}
+        <View style={styles.cacToggleRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cacToggleLabel}>CAC Registered Business?</Text>
+            <Text style={styles.cacToggleHint}>Toggle on if your business is officially registered</Text>
+          </View>
+          <Switch
+            value={isBusinessRegistered}
+            onValueChange={setIsBusinessRegistered}
+            trackColor={{ false: '#E5E7EB', true: '#BBF7D0' }}
+            thumbColor={isBusinessRegistered ? colors.success : colors.muted}
+          />
+        </View>
+
+        {isBusinessRegistered && (
+          <TouchableOpacity style={styles.cacUploadBtn} onPress={pickCacDocument} activeOpacity={0.8}>
+            <Ionicons
+              name={cacDocumentUri ? 'document-text' : 'cloud-upload-outline'}
+              size={20}
+              color={cacDocumentUri ? colors.success : colors.primary}
+            />
+            <Text style={[styles.cacUploadText, cacDocumentUri && { color: colors.success }]}>
+              {cacDocumentName ?? 'Upload CAC Document (photo)'}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {apiError ? <Text style={styles.apiError}>{apiError}</Text> : null}
 
         <Button
@@ -318,6 +374,28 @@ const styles = StyleSheet.create({
   },
   strengthFill: { height: '100%', borderRadius: 2 },
   strengthLabel: { fontFamily: 'DMSans_500Medium', fontSize: 12, width: 50 },
+  cacToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.lightGray,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+  },
+  cacToggleLabel: { fontFamily: 'DMSans_600SemiBold', fontSize: 14, color: colors.navy },
+  cacToggleHint: { fontFamily: 'DMSans_400Regular', fontSize: 12, color: colors.muted, marginTop: 2 },
+  cacUploadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  cacUploadText: { fontFamily: 'DMSans_500Medium', fontSize: 14, color: colors.primary, flex: 1 },
   apiError: {
     fontFamily: 'DMSans_400Regular',
     fontSize: 13,

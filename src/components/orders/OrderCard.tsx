@@ -1,24 +1,41 @@
-import React, { useRef, useEffect, useState } from 'react';
-import {
-  View, Text, TouchableOpacity, StyleSheet, Animated,
-  Modal, ScrollView, TextInput,
-} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import Badge, { getStatusColor, getStatusLabel } from '../common/Badge';
-import Button from '../common/Button';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Animated,
+  Modal, ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { colors } from '../../theme/colors';
 import { shadows } from '../../theme/shadows';
-import { formatCurrency, formatOrderNumber, formatRelativeTime } from '../../utils/formatters';
+import useMerchantType from '../../hooks/useMerchantType';
 import type { Order, OrderStatus } from '../../types';
+import { formatCurrency, formatOrderNumber, formatRelativeTime } from '../../utils/formatters';
+import Badge, { getStatusColor, getStatusLabel } from '../common/Badge';
+import Button from '../common/Button';
 
-const CANCEL_REASONS = [
-  'Item(s) out of stock',
-  'Restaurant closing early',
-  'Too busy to fulfil this order',
-  'Customer requested cancellation',
-  'Technical issue',
-  'Other',
-];
+function getCancelReasons(isRestaurant: boolean): string[] {
+  return isRestaurant
+    ? [
+      'Item(s) out of stock',
+      'Restaurant closing early',
+      'Too busy to fulfil this order',
+      'Customer requested cancellation',
+      'Technical issue',
+      'Other',
+    ]
+    : [
+      'Product(s) out of stock',
+      'Store closing early',
+      'Unable to process this order now',
+      'Customer requested cancellation',
+      'Technical issue',
+      'Other',
+    ];
+}
 
 const PREP_TIMES = [10, 15, 20, 30, 45, 60];
 
@@ -39,11 +56,11 @@ function getNextStatus(status: OrderStatus): OrderStatus | null {
   }
 }
 
-function getActionLabel(status: OrderStatus): string {
+function getActionLabel(status: OrderStatus, isRestaurant: boolean): string {
   switch (status) {
     case 'PENDING':
-    case 'CONFIRMED': return 'Start Preparing →';
-    case 'PREPARING': return 'Mark Ready for Pickup →';
+    case 'CONFIRMED': return isRestaurant ? 'Start Preparing →' : 'Start Processing →';
+    case 'PREPARING': return isRestaurant ? 'Mark Ready for Pickup →' : 'Mark Ready for Dispatch →';
     default: return 'Update →';
   }
 }
@@ -60,6 +77,7 @@ export default function OrderCard({
   onCancel,
   isNew,
 }: OrderCardProps): React.JSX.Element {
+  const { isRestaurant } = useMerchantType();
   const slideAnim = useRef(new Animated.Value(isNew ? -60 : 0)).current;
   const opacityAnim = useRef(new Animated.Value(isNew ? 0 : 1)).current;
 
@@ -99,11 +117,16 @@ export default function OrderCard({
   const nextStatus = getNextStatus(status);
   const isStartPreparing = status === 'PENDING' || status === 'CONFIRMED';
 
-  const items = order.items ?? order.orderItems ?? [];
+  const orderItems = order.items ?? order.orderItems ?? [];
   const customer = order.customer ?? order.user;
   const customerName = customer?.firstName
     ? `${customer.firstName} ${customer.lastName ?? ''}`
     : (customer as { name?: string })?.name ?? 'Customer';
+  const cancelReasons = getCancelReasons(isRestaurant);
+  const remainingCount = orderItems.length > 3 ? orderItems.length - 3 : 0;
+  const remainingLabel = isRestaurant
+    ? remainingCount === 1 ? 'item' : 'items'
+    : remainingCount === 1 ? 'product' : 'products';
 
   const effectivePrepTime = order.estimatedPrepTime;
 
@@ -202,13 +225,13 @@ export default function OrderCard({
 
           {/* Items */}
           <View style={styles.items}>
-            {items.slice(0, 3).map((item, i) => (
+            {orderItems.slice(0, 3).map((item, i) => (
               <Text key={i} style={styles.itemText}>
                 {item.quantity}x {item.menuItem?.name ?? item.name}
               </Text>
             ))}
-            {items.length > 3 && (
-              <Text style={styles.moreItems}>+{items.length - 3} more items</Text>
+            {orderItems.length > 3 && (
+              <Text style={styles.moreItems}>+{remainingCount} more {remainingLabel}</Text>
             )}
           </View>
 
@@ -218,9 +241,6 @@ export default function OrderCard({
           <View style={styles.pricing}>
             <Text style={styles.pricingText}>
               Subtotal: {formatCurrency(order.subtotal ?? 0)}
-            </Text>
-            <Text style={styles.pricingText}>
-              Delivery: {formatCurrency(order.deliveryFee ?? 0)}
             </Text>
             <Text style={styles.total}>Total: {formatCurrency(order.total ?? order.totalAmount ?? 0)}</Text>
           </View>
@@ -277,11 +297,11 @@ export default function OrderCard({
                 </View>
               ) : nextStatus ? (
                 <Button
-                  label={getActionLabel(status)}
+                  label={getActionLabel(status, isRestaurant)}
                   variant="primary"
                   size="sm"
                   onPress={handleNextStatus}
-                  style={[styles.actionBtn, !canCancel && { flex: 1 }]}
+                  style={{ ...styles.actionBtn, ...(!canCancel ? { flex: 1 } : {}) }}
                 />
               ) : null}
             </View>
@@ -321,7 +341,7 @@ export default function OrderCard({
             <Text style={styles.sheetSubtitle}>Why are you cancelling?</Text>
 
             <ScrollView showsVerticalScrollIndicator={false} style={styles.reasonsScroll}>
-              {CANCEL_REASONS.map((reason) => (
+              {cancelReasons.map((reason) => (
                 <TouchableOpacity
                   key={reason}
                   style={styles.reasonRow}
@@ -387,9 +407,13 @@ export default function OrderCard({
         >
           <View style={styles.sheet} onStartShouldSetResponder={() => true}>
             <View style={styles.sheetHandle} />
-            <Text style={styles.sheetTitle}>Start Preparing — {formatOrderNumber(order.id)}</Text>
+            <Text style={styles.sheetTitle}>
+              {isRestaurant ? 'Start Preparing' : 'Start Processing'} — {formatOrderNumber(order.id)}
+            </Text>
             <View style={styles.sheetDivider} />
-            <Text style={styles.sheetSubtitle}>How long will this take?</Text>
+            <Text style={styles.sheetSubtitle}>
+              {isRestaurant ? 'How long will this take?' : 'How long until this order is ready?'}
+            </Text>
 
             <View style={styles.prepGrid}>
               {PREP_TIMES.map((t) => (
@@ -449,7 +473,7 @@ export default function OrderCard({
                 style={{ flex: 1 }}
               />
               <Button
-                label="Confirm — Start Preparing"
+                label={isRestaurant ? 'Confirm — Start Preparing' : 'Confirm — Start Processing'}
                 variant="primary"
                 size="sm"
                 onPress={handlePrepSubmit}
@@ -470,7 +494,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 16,
     padding: 16,
-    marginBottom: 14,
+    marginBottom: 14, 
   },
   header: {
     flexDirection: 'row',

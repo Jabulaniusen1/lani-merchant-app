@@ -1,9 +1,9 @@
 import type { OrderStatus } from '../types';
 
-export const BASE_URL = 'http://localhost:8000/api/v1';
-export const SOCKET_URL = 'http://localhost:8000';
-export const CLOUDINARY_CLOUD_NAME = 'YOUR_CLOUD_NAME';
-export const CLOUDINARY_UPLOAD_PRESET = 'lanieats_merchants';
+export const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000/api/v1';
+export const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL ?? 'http://localhost:8000';
+export const CLOUDINARY_CLOUD_NAME = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME ?? '';
+export const CLOUDINARY_UPLOAD_PRESET = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET ?? 'lanieats_merchants';
 
 export interface NigerianCity {
   label: string;

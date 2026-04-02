@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import * as Haptics from 'expo-haptics';
+import * as Device from 'expo-device';
 import { formatOrderNumber } from '../utils/formatters';
 import type { NewOrderPayload } from '../types';
 
@@ -27,8 +28,20 @@ export const showNewOrderNotification = async (order: NewOrderPayload): Promise<
       },
       trigger: null,
     });
-  } catch (e) {
-    console.log('Notification error:', e);
+  } catch {
+    // ignore — notification not critical
+  }
+};
+
+export const getExpoPushToken = async (): Promise<string | null> => {
+  try {
+    if (!Device.isDevice) return null;
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== 'granted') return null;
+    const tokenData = await Notifications.getExpoPushTokenAsync();
+    return tokenData.data;
+  } catch {
+    return null;
   }
 };
 

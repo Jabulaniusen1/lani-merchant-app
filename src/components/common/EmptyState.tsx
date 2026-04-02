@@ -1,10 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, type ViewStyle } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import Button from './Button';
 import { colors } from '../../theme/colors';
 
 interface EmptyStateProps {
-  icon?: string;
+  icon?: React.ComponentProps<typeof Ionicons>['name'];
+  iconColor?: string;
   title: string;
   subtitle?: string;
   actionLabel?: string;
@@ -12,7 +14,8 @@ interface EmptyStateProps {
 }
 
 export default function EmptyState({
-  icon = '📭',
+  icon = 'mail-open-outline',
+  iconColor = colors.muted,
   title,
   subtitle,
   actionLabel,
@@ -20,7 +23,9 @@ export default function EmptyState({
 }: EmptyStateProps): React.JSX.Element {
   return (
     <View style={styles.container}>
-      <Text style={styles.icon}>{icon}</Text>
+      <View style={styles.iconWrap}>
+        <Ionicons name={icon} size={56} color={iconColor} />
+      </View>
       <Text style={styles.title}>{title}</Text>
       {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
       {actionLabel && onAction && (
@@ -38,7 +43,7 @@ const styles = StyleSheet.create({
     padding: 32,
     minHeight: 300,
   },
-  icon: { fontSize: 56, marginBottom: 16 },
+  iconWrap: { marginBottom: 16 },
   title: {
     fontFamily: 'Sora_600SemiBold',
     fontSize: 18,

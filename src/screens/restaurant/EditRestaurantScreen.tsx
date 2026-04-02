@@ -13,6 +13,7 @@ import Button from '../../components/common/Button';
 import TimePicker from '../../components/common/TimePicker';
 import { showToast } from '../../components/common/Toast';
 import useRestaurantStore from '../../store/restaurant.store';
+import useMerchantType from '../../hooks/useMerchantType';
 import { uploadRestaurantLogo, uploadRestaurantCover } from '../../api/upload.api';
 import { colors } from '../../theme/colors';
 import { NIGERIAN_CITIES, type NigerianCity } from '../../utils/constants';
@@ -46,6 +47,7 @@ export default function EditRestaurantScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { restaurants, updateRestaurant } = useRestaurantStore();
+  const { isRestaurant: merchantIsRestaurant } = useMerchantType();
   const [loading, setLoading] = useState<boolean>(false);
   const [showCityPicker, setShowCityPicker] = useState<boolean>(false);
   const [restaurantType, setRestaurantType] = useState<RestaurantType | null>(null);
@@ -55,6 +57,8 @@ export default function EditRestaurantScreen(): React.JSX.Element {
   const [coverUri, setCoverUri] = useState<string | null>(null);
 
   const restaurant = restaurants.find((r) => r.id === id);
+  const isRestaurantMerchant =
+    (restaurant?.merchant?.merchantType ?? (merchantIsRestaurant ? 'RESTAURANT' : 'PHARMACY')) === 'RESTAURANT';
 
   const { control, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<EditRestaurantFormData>({
     defaultValues: {
@@ -132,9 +136,16 @@ export default function EditRestaurantScreen(): React.JSX.Element {
   };
 
   const onSubmit = async (data: EditRestaurantFormData): Promise<void> => {
+    if (data.closingTime <= data.openingTime) {
+      showToast({ type: 'error', message: 'Closing time must be after opening time' });
+      return;
+    }
     setLoading(true);
     try {
-      await updateRestaurant(id, { ...data, ...(restaurantType ? { restaurantType } : {}) });
+      await updateRestaurant(id, {
+        ...data,
+        ...(isRestaurantMerchant && restaurantType ? { restaurantType } : {}),
+      });
       showToast({ type: 'success', message: 'Restaurant updated successfully' });
       router.back();
     } catch (error: unknown) {
@@ -277,24 +288,25 @@ export default function EditRestaurantScreen(): React.JSX.Element {
           )}
         />
 
-        {/* Restaurant Type */}
-        <View style={styles.fieldGroup}>
-          <Text style={styles.fieldLabel}>Restaurant Type</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.typePills}>
-            {RESTAURANT_TYPES.map((t) => (
-              <TouchableOpacity
-                key={t.value}
-                style={[styles.typePill, restaurantType === t.value && styles.typePillActive]}
-                onPress={() => setRestaurantType(restaurantType === t.value ? null : t.value)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.typePillText, restaurantType === t.value && styles.typePillTextActive]}>
-                  {t.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+        {isRestaurantMerchant && (
+          <View style={styles.fieldGroup}>
+            <Text style={styles.fieldLabel}>Restaurant Type</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.typePills}>
+              {RESTAURANT_TYPES.map((t) => (
+                <TouchableOpacity
+                  key={t.value}
+                  style={[styles.typePill, restaurantType === t.value && styles.typePillActive]}
+                  onPress={() => setRestaurantType(restaurantType === t.value ? null : t.value)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.typePillText, restaurantType === t.value && styles.typePillTextActive]}>
+                    {t.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         <View style={styles.row}>
           <View style={styles.halfField}>

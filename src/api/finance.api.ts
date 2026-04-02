@@ -37,3 +37,6 @@ export const requestPayoutApi = (
 
 export const getPayoutHistoryApi = (): Promise<AxiosResponse<ApiResponse<{ payouts: Payout[] }>>> =>
   client.get('/payouts/history');
+
+export const getPayoutConfigApi = (): Promise<AxiosResponse<ApiResponse<{ minPayout: number; commissionRate: number }>>> =>
+  client.get('/payouts/config');

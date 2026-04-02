@@ -115,7 +115,7 @@ export default function TransactionsScreen(): React.JSX.Element {
           }
           ListEmptyComponent={
             <EmptyState
-              icon="💳"
+              icon="card-outline"
               title="No transactions yet"
               subtitle="Completed orders with earnings will appear here."
             />

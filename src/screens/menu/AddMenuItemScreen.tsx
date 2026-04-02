@@ -11,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import { showToast } from '../../components/common/Toast';
-import { addMenuItemApi, getMenuApi } from '../../api/menu.api';
+import { addMenuItemApi, getCategoriesApi } from '../../api/menu.api';
 import { uploadMenuItemImage } from '../../api/upload.api';
 import useRestaurantStore from '../../store/restaurant.store';
 import useMerchantType from '../../hooks/useMerchantType';
@@ -35,7 +35,7 @@ export default function AddMenuItemScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { activeRestaurant } = useRestaurantStore();
-  const { Item, item } = useMerchantType();
+  const { Item, item, Menu, merchantType } = useMerchantType();
   const [loading, setLoading] = useState<boolean>(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
@@ -55,20 +55,29 @@ export default function AddMenuItemScreen(): React.JSX.Element {
       requiresPrescription: false,
     },
   });
-  const { merchantType, isRestaurant } = useMerchantType();
+
   const needsStock = merchantType === 'PHARMACY' || merchantType === 'SUPERMARKET';
   const isPharmacy = merchantType === 'PHARMACY';
+  const isSupermarket = merchantType === 'SUPERMARKET';
+  const namePlaceholder = isPharmacy
+    ? 'e.g. Amoxicillin 500mg Capsules'
+    : isSupermarket
+      ? 'e.g. Golden Penny Spaghetti 500g'
+      : 'e.g. Jollof Rice + Chicken';
+  const descriptionPlaceholder = isPharmacy
+    ? 'e.g. 500mg capsules, 10 per blister pack...'
+    : isSupermarket
+      ? 'e.g. Whole grain cereal, 500g family pack...'
+      : 'Party jollof with smoky base...';
+  const stockPlaceholder = isPharmacy ? 'e.g. 48' : 'e.g. 100';
 
   const selectedCategoryName = watch('categoryName');
 
   useEffect(() => {
     const loadCategories = async (): Promise<void> => {
       try {
-        const res = await getMenuApi(restaurantId);
-        const data = res.data.data;
-        if (data && !Array.isArray(data) && (data as { categories?: MenuCategory[] }).categories) {
-          setCategories((data as { categories: MenuCategory[] }).categories);
-        }
+        const res = await getCategoriesApi(restaurantId);
+        setCategories(res.data.data?.categories ?? []);
       } catch {
         // ignore
       }
@@ -98,6 +107,12 @@ export default function AddMenuItemScreen(): React.JSX.Element {
   const onSubmit = async (data: AddMenuItemFormData): Promise<void> => {
     setLoading(true);
     try {
+      if (!data.categoryId) {
+        showToast({ type: 'error', message: 'Please select a category' });
+        setLoading(false);
+        return;
+      }
+
       const price = parsePriceInput(data.price);
       if (!price || price <= 0) {
         showToast({ type: 'error', message: 'Please enter a valid price' });
@@ -122,7 +137,11 @@ export default function AddMenuItemScreen(): React.JSX.Element {
         ...(isPharmacy && { requiresPrescription: data.requiresPrescription }),
       });
 
-      const newItem = res.data.data?.menuItem ?? (res.data.data as unknown as { id?: string });
+      const newItem =
+        res.data.data?.menuItem ??
+        (res.data.data as unknown as { product?: { id: string } })?.product ??
+        (res.data.data as unknown as { id?: string });
+
       if (imageUri && newItem?.id) {
         try {
           await uploadMenuItemImage(restaurantId, newItem.id, imageUri);
@@ -154,7 +173,6 @@ export default function AddMenuItemScreen(): React.JSX.Element {
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={colors.navy} />
@@ -169,6 +187,46 @@ export default function AddMenuItemScreen(): React.JSX.Element {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        {/* Category picker */}
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>
+            Category <Text style={{ color: colors.error }}>*</Text>
+          </Text>
+          <TouchableOpacity
+            style={styles.picker}
+            onPress={() => setShowCategoryPicker(!showCategoryPicker)}
+          >
+            <Text style={[styles.pickerText, !selectedCategoryName && { color: colors.muted }]}>
+              {selectedCategoryName || 'Select a category'}
+            </Text>
+            <Ionicons name="chevron-down" size={18} color={colors.muted} />
+          </TouchableOpacity>
+        </View>
+
+        {showCategoryPicker && (
+          <View style={styles.dropdown}>
+            {categories.length === 0 ? (
+              <View style={styles.emptyCategories}>
+                <Text style={styles.emptyCategoriesText}>No categories yet. Add one from the {Menu.toLowerCase()} page.</Text>
+              </View>
+            ) : (
+              categories.map((c) => (
+                <TouchableOpacity
+                  key={c.id}
+                  style={styles.dropdownItem}
+                  onPress={() => {
+                    setValue('categoryId', c.id);
+                    setValue('categoryName', c.name);
+                    setShowCategoryPicker(false);
+                  }}
+                >
+                  <Text style={styles.dropdownText}>{c.name}</Text>
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        )}
+
         {/* Image picker */}
         <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
           {imageUri ? (
@@ -176,7 +234,7 @@ export default function AddMenuItemScreen(): React.JSX.Element {
           ) : (
             <View style={styles.imagePlaceholder}>
               <Ionicons name="camera-outline" size={32} color={colors.muted} />
-              <Text style={styles.imageText}>Add Item Photo</Text>
+              <Text style={styles.imageText}>Add {Item} Photo</Text>
             </View>
           )}
         </TouchableOpacity>
@@ -188,7 +246,7 @@ export default function AddMenuItemScreen(): React.JSX.Element {
           render={({ field: { onChange, value } }) => (
             <Input
               label={`${Item} Name`}
-              placeholder={`e.g. Jollof Rice + Chicken`}
+              placeholder={namePlaceholder}
               value={value}
               onChangeText={onChange}
               error={errors.name?.message}
@@ -202,7 +260,7 @@ export default function AddMenuItemScreen(): React.JSX.Element {
           render={({ field: { onChange, value } }) => (
             <Input
               label="Description (optional)"
-              placeholder="Party jollof with smoky base..."
+              placeholder={descriptionPlaceholder}
               multiline
               numberOfLines={2}
               value={value}
@@ -228,7 +286,6 @@ export default function AddMenuItemScreen(): React.JSX.Element {
           )}
         />
 
-        {/* Stock Quantity — pharmacy & supermarket */}
         {needsStock && (
           <Controller
             control={control}
@@ -237,7 +294,7 @@ export default function AddMenuItemScreen(): React.JSX.Element {
             render={({ field: { onChange, value } }) => (
               <Input
                 label="Stock Quantity"
-                placeholder="e.g. 100"
+                placeholder={stockPlaceholder}
                 keyboardType="numeric"
                 value={value}
                 onChangeText={onChange}
@@ -247,7 +304,6 @@ export default function AddMenuItemScreen(): React.JSX.Element {
           />
         )}
 
-        {/* Requires Prescription — pharmacy only */}
         {isPharmacy && (
           <Controller
             control={control}
@@ -267,40 +323,6 @@ export default function AddMenuItemScreen(): React.JSX.Element {
               </View>
             )}
           />
-        )}
-
-        {/* Category picker */}
-        {categories.length > 0 && (
-          <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>Category</Text>
-            <TouchableOpacity
-              style={styles.picker}
-              onPress={() => setShowCategoryPicker(!showCategoryPicker)}
-            >
-              <Text style={[styles.pickerText, !selectedCategoryName && { color: colors.muted }]}>
-                {selectedCategoryName || 'Select category'}
-              </Text>
-              <Ionicons name="chevron-down" size={18} color={colors.muted} />
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {showCategoryPicker && (
-          <View style={styles.dropdown}>
-            {categories.map((c) => (
-              <TouchableOpacity
-                key={c.id}
-                style={styles.dropdownItem}
-                onPress={() => {
-                  setValue('categoryId', c.id);
-                  setValue('categoryName', c.name);
-                  setShowCategoryPicker(false);
-                }}
-              >
-                <Text style={styles.dropdownText}>{c.name}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
         )}
 
         <Button
@@ -331,10 +353,7 @@ const styles = StyleSheet.create({
   backBtn: { padding: 4 },
   headerTitle: { fontFamily: 'Sora_700Bold', fontSize: 17, color: colors.navy },
   content: { padding: 20, paddingBottom: 40 },
-  imagePicker: {
-    alignSelf: 'center',
-    marginBottom: 24,
-  },
+  imagePicker: { alignSelf: 'center', marginBottom: 24 },
   itemImage: { width: 140, height: 140, borderRadius: 16, resizeMode: 'cover' },
   imagePlaceholder: {
     width: 140,
@@ -371,8 +390,15 @@ const styles = StyleSheet.create({
     elevation: 4,
     overflow: 'hidden',
   },
-  dropdownItem: { paddingVertical: 13, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: colors.lightGray },
+  dropdownItem: {
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.lightGray,
+  },
   dropdownText: { fontFamily: 'DMSans_400Regular', fontSize: 15, color: colors.navy },
+  emptyCategories: { padding: 16 },
+  emptyCategoriesText: { fontFamily: 'DMSans_400Regular', fontSize: 14, color: colors.muted, textAlign: 'center' },
   submitBtn: { marginTop: 12 },
   toggleRow: {
     flexDirection: 'row',

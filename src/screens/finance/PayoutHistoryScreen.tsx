@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, RefreshControl, StyleSheet,
+  View, Text, FlatList, TouchableOpacity, RefreshControl, ScrollView, StyleSheet,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,6 +40,17 @@ export default function PayoutHistoryScreen(): React.JSX.Element {
   const { payouts, fetchPayouts } = useFinanceStore();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+
+  const STATUS_FILTERS = ['ALL', 'PROCESSING', 'COMPLETED', 'FAILED'];
+
+  const filteredPayouts = useMemo(
+    () =>
+      statusFilter === 'ALL'
+        ? payouts
+        : payouts.filter((p) => p.status === statusFilter),
+    [payouts, statusFilter]
+  );
 
   const load = async (): Promise<void> => {
     try {
@@ -108,6 +119,27 @@ export default function PayoutHistoryScreen(): React.JSX.Element {
         <View style={{ width: 24 }} />
       </View>
 
+      {/* Status Filter Chips */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterRow}
+        contentContainerStyle={styles.filterContent}
+      >
+        {STATUS_FILTERS.map((f) => (
+          <TouchableOpacity
+            key={f}
+            style={[styles.filterChip, statusFilter === f && styles.filterChipActive]}
+            onPress={() => setStatusFilter(f)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.filterChipText, statusFilter === f && styles.filterChipTextActive]}>
+              {f === 'ALL' ? 'All' : f.charAt(0) + f.slice(1).toLowerCase()}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
       {loading && !refreshing ? (
         <View style={{ padding: 16, gap: 12 }}>
           {[1, 2, 3].map((i) => (
@@ -116,7 +148,7 @@ export default function PayoutHistoryScreen(): React.JSX.Element {
         </View>
       ) : (
         <FlatList<Payout>
-          data={payouts}
+          data={filteredPayouts}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
@@ -125,7 +157,7 @@ export default function PayoutHistoryScreen(): React.JSX.Element {
           }
           ListEmptyComponent={
             <EmptyState
-              icon="💸"
+              icon="cash-outline"
               title="No payouts yet"
               subtitle="Your payout requests will appear here."
             />
@@ -145,6 +177,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: colors.lightGray,
   },
   title: { fontFamily: 'Sora_700Bold', fontSize: 18, color: colors.navy },
+  filterRow: { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: colors.lightGray },
+  filterContent: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
+  filterChip: {
+    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999,
+    backgroundColor: colors.lightGray,
+  },
+  filterChipActive: { backgroundColor: colors.primary },
+  filterChipText: { fontFamily: 'DMSans_500Medium', fontSize: 13, color: colors.muted },
+  filterChipTextActive: { color: '#fff' },
   list: { padding: 16, paddingBottom: 40 },
   card: {
     backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 12,

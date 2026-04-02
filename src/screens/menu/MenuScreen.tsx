@@ -1,10 +1,9 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { useFocusEffect } from 'expo-router';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, RefreshControl,
-  SectionList, Modal, TextInput, Alert, StyleSheet,
+  SectionList, Modal, TextInput, Alert, StyleSheet, FlatList, ScrollView,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import MenuItemCard from '../../components/menu/MenuItemCard';
@@ -24,19 +23,28 @@ interface MenuSection {
   data: MenuItem[];
 }
 
+interface ProductGridItem {
+  item: MenuItem;
+  categoryName: string;
+}
+
+type AvailabilityFilter = 'ALL' | 'AVAILABLE' | 'UNAVAILABLE';
+
 export default function MenuScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { restaurants, activeRestaurant, setActiveRestaurant } = useRestaurantStore();
   const { Item, Items, Menu, item, items, menu, store, Store, isRestaurant } = useMerchantType();
   const [menuData, setMenuData] = useState<MenuSection[]>([]);
-  const [categories, setCategories] = useState<MenuCategory[] | string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [showCategoryModal, setShowCategoryModal] = useState<boolean>(false);
   const [newCategoryName, setNewCategoryName] = useState<string>('');
   const [addingCategory, setAddingCategory] = useState<boolean>(false);
   const [showRestaurantPicker, setShowRestaurantPicker] = useState<boolean>(false);
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('ALL');
+  const [selectedAvailabilityFilter, setSelectedAvailabilityFilter] = useState<AvailabilityFilter>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   const restaurantId = activeRestaurant?.id;
 
@@ -59,13 +67,6 @@ export default function MenuScreen(): React.JSX.Element {
       if (Array.isArray(data)) {
         const grouped = groupByCategory(data as MenuItem[]);
         setMenuData(grouped);
-        setCategories([
-          ...new Set(
-            (data as MenuItem[])
-              .map((i) => i.category?.name ?? 'Uncategorized')
-              .filter(Boolean)
-          ),
-        ]);
       } else if ((data as { categories?: MenuCategory[] }).categories) {
         const typedData = data as { categories: MenuCategory[] };
         const sections: MenuSection[] = typedData.categories.map((cat) => ({
@@ -74,7 +75,9 @@ export default function MenuScreen(): React.JSX.Element {
           data: cat.items ?? cat.menuItems ?? [],
         }));
         setMenuData(sections);
-        setCategories(typedData.categories);
+      } else if ((data as { products?: MenuItem[] }).products) {
+        const grouped = groupByCategory((data as { products: MenuItem[] }).products);
+        setMenuData(grouped);
       } else if ((data as { menuItems?: MenuItem[] }).menuItems) {
         const grouped = groupByCategory((data as { menuItems: MenuItem[] }).menuItems);
         setMenuData(grouped);
@@ -89,7 +92,7 @@ export default function MenuScreen(): React.JSX.Element {
     } finally {
       setIsLoading(false);
     }
-  }, [restaurantId]);
+  }, [menu, restaurantId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -163,7 +166,64 @@ export default function MenuScreen(): React.JSX.Element {
     }
   };
 
-  const allItems = menuData.flatMap((s) => s.data);
+  const allItems = useMemo(() => menuData.flatMap((s) => s.data), [menuData]);
+  const categoryFilters = useMemo(
+    () => ['ALL', ...new Set(menuData.map((section) => section.title).filter(Boolean))],
+    [menuData]
+  );
+  const availabilityFilters: { label: string; value: AvailabilityFilter }[] = [
+    { label: 'All', value: 'ALL' },
+    { label: 'Available', value: 'AVAILABLE' },
+    { label: 'Unavailable', value: 'UNAVAILABLE' },
+  ];
+  const gridItems = useMemo<ProductGridItem[]>(
+    () =>
+      menuData.flatMap((section) =>
+        section.data.map((menuItem) => ({
+          item: menuItem,
+          categoryName: menuItem.category?.name ?? section.title,
+        }))
+      ),
+    [menuData]
+  );
+  const filteredGridItems = useMemo(
+    () =>
+      gridItems.filter(({ item: gridItem, categoryName }) => {
+        const matchesCategory =
+          selectedCategoryFilter === 'ALL' || categoryName === selectedCategoryFilter;
+        const matchesAvailability =
+          selectedAvailabilityFilter === 'ALL'
+            ? true
+            : selectedAvailabilityFilter === 'AVAILABLE'
+              ? gridItem.isAvailable !== false
+              : gridItem.isAvailable === false;
+        const matchesSearch =
+          !searchQuery || gridItem.name.toLowerCase().includes(searchQuery.toLowerCase());
+        return matchesCategory && matchesAvailability && matchesSearch;
+      }),
+    [gridItems, selectedCategoryFilter, selectedAvailabilityFilter, searchQuery]
+  );
+
+  const filteredSections = useMemo(
+    () =>
+      !searchQuery
+        ? menuData
+        : menuData
+          .map((section) => ({
+            ...section,
+            data: section.data.filter((i) =>
+              i.name.toLowerCase().includes(searchQuery.toLowerCase())
+            ),
+          }))
+          .filter((section) => section.data.length > 0),
+    [menuData, searchQuery]
+  );
+
+  useEffect(() => {
+    if (selectedCategoryFilter !== 'ALL' && !categoryFilters.includes(selectedCategoryFilter)) {
+      setSelectedCategoryFilter('ALL');
+    }
+  }, [categoryFilters, selectedCategoryFilter]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -192,6 +252,24 @@ export default function MenuScreen(): React.JSX.Element {
         </TouchableOpacity>
       </View>
 
+      {/* Search Bar */}
+      <View style={styles.searchBar}>
+        <Ionicons name="search-outline" size={18} color={colors.muted} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={`Search ${items}...`}
+          placeholderTextColor={colors.muted}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          returnKeyType="search"
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="close-circle" size={18} color={colors.muted} />
+          </TouchableOpacity>
+        )}
+      </View>
+
       {activeRestaurant && !activeRestaurant.isApproved && (
         <View style={styles.approvalBanner}>
           <Ionicons name="time-outline" size={18} color="#92400E" />
@@ -210,15 +288,99 @@ export default function MenuScreen(): React.JSX.Element {
         </View>
       ) : allItems.length === 0 && menuData.length === 0 ? (
         <EmptyState
-          icon={isRestaurant ? '🍽️' : '📦'}
+          icon={isRestaurant ? 'restaurant-outline' : 'cube-outline'}
           title={isRestaurant ? 'Your menu is empty' : `No ${items} yet`}
           subtitle={`Add your first ${item} to start receiving orders.`}
           actionLabel={`Add ${Item}`}
           onAction={() => router.push('/(main)/menu/add')}
         />
+      ) : !isRestaurant ? (
+        <>
+          <View style={styles.filtersContainer}>
+            <View style={styles.filterGroup}>
+              <Text style={styles.filterTitle}>Category</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chipsRow}
+              >
+                {categoryFilters.map((category) => {
+                  const isActive = selectedCategoryFilter === category;
+                  const label = category === 'ALL' ? 'All' : category;
+                  return (
+                    <TouchableOpacity
+                      key={category}
+                      style={[styles.chip, isActive && styles.chipActive]}
+                      onPress={() => setSelectedCategoryFilter(category)}
+                    >
+                      <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            <View style={styles.filterGroup}>
+              <Text style={styles.filterTitle}>Availability</Text>
+              <View style={styles.chipsRow}>
+                {availabilityFilters.map((filter) => {
+                  const isActive = selectedAvailabilityFilter === filter.value;
+                  return (
+                    <TouchableOpacity
+                      key={filter.value}
+                      style={[styles.chip, isActive && styles.chipActive]}
+                      onPress={() => setSelectedAvailabilityFilter(filter.value)}
+                    >
+                      <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{filter.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+
+          {filteredGridItems.length === 0 ? (
+            <View style={styles.emptyFilterState}>
+              <Ionicons name="funnel-outline" size={26} color={colors.muted} />
+              <Text style={styles.emptyFilterTitle}>No products match these filters</Text>
+              <Text style={styles.emptyFilterHint}>Try a different category or availability option.</Text>
+            </View>
+          ) : (
+            <FlatList<ProductGridItem>
+              data={filteredGridItems}
+              keyExtractor={({ item: gridItem }) => gridItem.id}
+              numColumns={2}
+              columnWrapperStyle={styles.gridRow}
+              contentContainerStyle={styles.gridContent}
+              showsVerticalScrollIndicator={false}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+              }
+              renderItem={({ item: gridItem }) => (
+                <MenuItemCard
+                  item={gridItem.item}
+                  categoryName={gridItem.categoryName}
+                  variant="grid"
+                  onEdit={(menuItem) => router.push(`/(main)/menu/edit/${menuItem.id}`)}
+                  onToggleAvailability={handleToggleAvailability}
+                  onDelete={handleDelete}
+                />
+              )}
+              ListFooterComponent={
+                <TouchableOpacity
+                  style={styles.addCategoryBtn}
+                  onPress={() => setShowCategoryModal(true)}
+                >
+                  <Ionicons name="folder-open-outline" size={18} color={colors.primary} />
+                  <Text style={styles.addCategoryText}>Add Category</Text>
+                </TouchableOpacity>
+              }
+            />
+          )}
+        </>
       ) : (
         <SectionList<MenuItem, MenuSection>
-          sections={menuData}
+          sections={filteredSections}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
@@ -358,6 +520,42 @@ const styles = StyleSheet.create({
   },
   addBtnText: { fontFamily: 'DMSans_600SemiBold', fontSize: 14, color: '#fff' },
   content: { padding: 16, paddingBottom: 40, flexGrow: 1 },
+  filtersContainer: {
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.lightGray,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  filterGroup: { gap: 8 },
+  filterTitle: { fontFamily: 'DMSans_600SemiBold', fontSize: 13, color: colors.navy },
+  chipsRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#fff',
+  },
+  chipActive: {
+    backgroundColor: '#ECFDF5',
+    borderColor: colors.success,
+  },
+  chipText: { fontFamily: 'DMSans_500Medium', fontSize: 12, color: colors.navy },
+  chipTextActive: { color: '#065F46' },
+  gridContent: { padding: 16, paddingBottom: 40, flexGrow: 1 },
+  gridRow: { justifyContent: 'space-between' },
+  emptyFilterState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 48,
+    gap: 6,
+  },
+  emptyFilterTitle: { fontFamily: 'DMSans_600SemiBold', fontSize: 15, color: colors.navy },
+  emptyFilterHint: { fontFamily: 'DMSans_400Regular', fontSize: 13, color: colors.muted, textAlign: 'center' },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -385,6 +583,23 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   addCategoryText: { fontFamily: 'DMSans_600SemiBold', fontSize: 14, color: colors.primary },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.lightGray,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: 'DMSans_400Regular',
+    fontSize: 14,
+    color: colors.navy,
+    paddingVertical: 0,
+  },
   approvalBanner: {
     flexDirection: 'row',
     alignItems: 'flex-start',

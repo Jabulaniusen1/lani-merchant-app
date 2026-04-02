@@ -14,9 +14,9 @@ export const connectSocket = (token?: string): Socket => {
       auth: token ? { token } : undefined,
     });
 
-    socket.on('connect', () => console.log('Socket connected'));
-    socket.on('disconnect', () => console.log('Socket disconnected'));
-    socket.on('connect_error', (err: Error) => console.log('Socket error:', err.message));
+    socket.on('connect', () => {});
+    socket.on('disconnect', () => {});
+    socket.on('connect_error', () => {});
   }
   return socket;
 };

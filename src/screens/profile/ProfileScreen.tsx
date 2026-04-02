@@ -13,7 +13,7 @@ import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import { showToast } from '../../components/common/Toast';
 import useAuthStore from '../../store/auth.store';
-import { changePasswordApi } from '../../api/auth.api';
+import { changePasswordApi, updateProfileApi } from '../../api/auth.api';
 import useMerchantType from '../../hooks/useMerchantType';
 import { colors } from '../../theme/colors';
 
@@ -23,6 +23,12 @@ interface ChangePasswordFormData {
   currentPassword: string;
   newPassword: string;
   confirmPassword: string;
+}
+
+interface EditProfileFormData {
+  firstName: string;
+  lastName: string;
+  phone: string;
 }
 
 interface MenuItemProps {
@@ -48,13 +54,29 @@ function MenuItem({ icon, label, onPress, danger, rightElement }: MenuItemProps)
 export default function ProfileScreen(): React.JSX.Element {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user, logout } = useAuthStore();
+  const { user, logout, updateUser } = useAuthStore();
   const { Store, merchantType } = useMerchantType();
   const [showChangePassword, setShowChangePassword] = useState<boolean>(false);
   const [changingPassword, setChangingPassword] = useState<boolean>(false);
+  const [showPasswords, setShowPasswords] = useState<boolean>(false);
+  const [showEditProfile, setShowEditProfile] = useState<boolean>(false);
+  const [savingProfile, setSavingProfile] = useState<boolean>(false);
 
   const { control, handleSubmit, reset, formState: { errors } } = useForm<ChangePasswordFormData>({
     defaultValues: { currentPassword: '', newPassword: '', confirmPassword: '' },
+  });
+
+  const {
+    control: profileControl,
+    handleSubmit: profileHandleSubmit,
+    reset: profileReset,
+    formState: { errors: profileErrors },
+  } = useForm<EditProfileFormData>({
+    defaultValues: {
+      firstName: (user as { firstName?: string } | null)?.firstName ?? '',
+      lastName: (user as { lastName?: string } | null)?.lastName ?? '',
+      phone: user?.phone ?? '',
+    },
   });
 
   const userName = user
@@ -73,6 +95,32 @@ export default function ProfileScreen(): React.JSX.Element {
         },
       },
     ]);
+  };
+
+  const onSaveProfile = async (data: EditProfileFormData): Promise<void> => {
+    setSavingProfile(true);
+    try {
+      const res = await updateProfileApi({
+        firstName: data.firstName.trim(),
+        lastName: data.lastName.trim(),
+        phone: data.phone.trim(),
+      });
+      const updated = (res.data.data as { user?: typeof user })?.user ?? res.data.data as typeof user;
+      if (updated) updateUser(updated);
+      showToast({ type: 'success', message: 'Profile updated' });
+      setShowEditProfile(false);
+    } catch (error: unknown) {
+      const message =
+        error !== null &&
+        typeof error === 'object' &&
+        'response' in error &&
+        (error as { response?: { data?: { message?: string } } }).response?.data?.message
+          ? (error as { response: { data: { message: string } } }).response.data.message
+          : 'Failed to update profile';
+      showToast({ type: 'error', message });
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const onChangePassword = async (data: ChangePasswordFormData): Promise<void> => {
@@ -128,7 +176,22 @@ export default function ProfileScreen(): React.JSX.Element {
 
         {/* Account Info */}
         <Card style={styles.card} shadow="sm">
-          <Text style={styles.cardTitle}>Account Information</Text>
+          <View style={styles.cardTitleRow}>
+            <Text style={styles.cardTitle}>Account Information</Text>
+            <TouchableOpacity
+              onPress={() => {
+                profileReset({
+                  firstName: (user as { firstName?: string } | null)?.firstName ?? '',
+                  lastName: (user as { lastName?: string } | null)?.lastName ?? '',
+                  phone: user?.phone ?? '',
+                });
+                setShowEditProfile(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.editLink}>Edit</Text>
+            </TouchableOpacity>
+          </View>
           <View style={styles.infoRow}>
             <Ionicons name="mail-outline" size={16} color={colors.muted} />
             <Text style={styles.infoText}>{user?.email ?? '—'}</Text>
@@ -176,12 +239,6 @@ export default function ProfileScreen(): React.JSX.Element {
             label="Bank Account"
             onPress={() => router.push('/(main)/finance/bank-account')}
           />
-          <View style={styles.divider} />
-          <MenuItem
-            icon="notifications-outline"
-            label="Notification Settings"
-            onPress={() => showToast({ type: 'info', message: 'Notification settings coming soon' })}
-          />
         </Card>
 
         <Card style={styles.card} shadow="sm">
@@ -196,12 +253,6 @@ export default function ProfileScreen(): React.JSX.Element {
             label="Contact Support"
             onPress={() => Linking.openURL('mailto:support@lanieats.com')}
           />
-          <View style={styles.divider} />
-          <MenuItem
-            icon="document-text-outline"
-            label="Terms of Service"
-            onPress={() => showToast({ type: 'info', message: 'Terms of service coming soon' })}
-          />
         </Card>
 
         <Card style={styles.card} shadow="sm">
@@ -215,6 +266,82 @@ export default function ProfileScreen(): React.JSX.Element {
 
         <Text style={styles.version}>Lanieats for Merchants v{APP_VERSION}</Text>
       </ScrollView>
+
+      {/* Edit Profile Modal */}
+      <Modal
+        visible={showEditProfile}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowEditProfile(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowEditProfile(false)}
+        >
+          <View style={styles.modalSheet} onStartShouldSetResponder={() => true}>
+            <Text style={styles.modalTitle}>Edit Profile</Text>
+
+            <View style={styles.editProfileRow}>
+              <View style={{ flex: 1 }}>
+                <Controller
+                  control={profileControl}
+                  name="firstName"
+                  rules={{ required: 'Required' }}
+                  render={({ field: { onChange, value } }) => (
+                    <Input
+                      label="First Name"
+                      value={value}
+                      onChangeText={onChange}
+                      error={profileErrors.firstName?.message}
+                    />
+                  )}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Controller
+                  control={profileControl}
+                  name="lastName"
+                  rules={{ required: 'Required' }}
+                  render={({ field: { onChange, value } }) => (
+                    <Input
+                      label="Last Name"
+                      value={value}
+                      onChangeText={onChange}
+                      error={profileErrors.lastName?.message}
+                    />
+                  )}
+                />
+              </View>
+            </View>
+
+            <Controller
+              control={profileControl}
+              name="phone"
+              rules={{
+                required: 'Phone is required',
+                pattern: { value: /^(\+234|0)[789][01]\d{8}$/, message: 'Enter a valid Nigerian phone' },
+              }}
+              render={({ field: { onChange, value } }) => (
+                <Input
+                  label="Phone Number"
+                  keyboardType="phone-pad"
+                  value={value}
+                  onChangeText={onChange}
+                  error={profileErrors.phone?.message}
+                />
+              )}
+            />
+
+            <Button
+              label="Save Changes"
+              onPress={profileHandleSubmit(onSaveProfile)}
+              loading={savingProfile}
+              fullWidth
+            />
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Change Password Modal */}
       <Modal
@@ -231,6 +358,11 @@ export default function ProfileScreen(): React.JSX.Element {
           <View style={styles.modalSheet} onStartShouldSetResponder={() => true}>
             <Text style={styles.modalTitle}>Change Password</Text>
 
+            <TouchableOpacity style={styles.eyeToggleRow} onPress={() => setShowPasswords((v) => !v)}>
+              <Ionicons name={showPasswords ? 'eye-off-outline' : 'eye-outline'} size={18} color={colors.muted} />
+              <Text style={styles.eyeToggleText}>{showPasswords ? 'Hide' : 'Show'} passwords</Text>
+            </TouchableOpacity>
+
             <Controller
               control={control}
               name="currentPassword"
@@ -238,7 +370,7 @@ export default function ProfileScreen(): React.JSX.Element {
               render={({ field: { onChange, value } }) => (
                 <Input
                   label="Current Password"
-                  secureTextEntry
+                  secureTextEntry={!showPasswords}
                   value={value}
                   onChangeText={onChange}
                   error={errors.currentPassword?.message}
@@ -253,7 +385,7 @@ export default function ProfileScreen(): React.JSX.Element {
               render={({ field: { onChange, value } }) => (
                 <Input
                   label="New Password"
-                  secureTextEntry
+                  secureTextEntry={!showPasswords}
                   value={value}
                   onChangeText={onChange}
                   error={errors.newPassword?.message}
@@ -268,7 +400,7 @@ export default function ProfileScreen(): React.JSX.Element {
               render={({ field: { onChange, value } }) => (
                 <Input
                   label="Confirm New Password"
-                  secureTextEntry
+                  secureTextEntry={!showPasswords}
                   value={value}
                   onChangeText={onChange}
                   error={errors.confirmPassword?.message}
@@ -319,13 +451,15 @@ const styles = StyleSheet.create({
   },
   roleText: { fontFamily: 'Sora_700Bold', fontSize: 11, color: colors.primary, letterSpacing: 1 },
   card: { marginBottom: 14 },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
   cardTitle: {
     fontFamily: 'Sora_600SemiBold',
     fontSize: 13,
     color: colors.muted,
-    marginBottom: 14,
     letterSpacing: 0.5,
   },
+  editLink: { fontFamily: 'DMSans_500Medium', fontSize: 13, color: colors.primary },
+  editProfileRow: { flexDirection: 'row', gap: 10 },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   infoText: { fontFamily: 'DMSans_400Regular', fontSize: 14, color: '#374151' },
   menuItem: {
@@ -365,5 +499,7 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingBottom: 40,
   },
-  modalTitle: { fontFamily: 'Sora_700Bold', fontSize: 18, color: colors.navy, marginBottom: 20 },
+  modalTitle: { fontFamily: 'Sora_700Bold', fontSize: 18, color: colors.navy, marginBottom: 12 },
+  eyeToggleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 },
+  eyeToggleText: { fontFamily: 'DMSans_500Medium', fontSize: 13, color: colors.muted },
 });

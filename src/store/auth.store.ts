@@ -1,7 +1,9 @@
 import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { saveAuth, clearAuth, getToken, getUser } from '../utils/storage';
-import { loginApi, registerApi, getMeApi, type RegisterData } from '../api/auth.api';
-import { connectSocket, joinMerchantRooms, disconnectSocket } from '../services/socket';
+import { loginApi, registerApi, logoutApi, getMeApi, savePushTokenApi, type RegisterData } from '../api/auth.api';
+import { connectSocket, disconnectSocket } from '../services/socket';
+import { getExpoPushToken } from '../services/notifications';
 import type { User } from '../types';
 
 interface AuthState {
@@ -39,8 +41,8 @@ const useAuthStore = create<AuthState>((set) => ({
           set({ user: null, token: null, isAuthenticated: false });
         }
       }
-    } catch (e) {
-      console.log('Init error', e);
+    } catch {
+      // ignore init errors
     } finally {
       set({ isLoading: false });
     }
@@ -48,12 +50,17 @@ const useAuthStore = create<AuthState>((set) => ({
 
   login: async (email: string, password: string): Promise<{ user: User; token: string }> => {
     const res = await loginApi(email, password);
-    const payload = res.data.data || (res.data as unknown as { token: string; user: User });
+    const payload = res.data.data || (res.data as unknown as { token: string; refreshToken?: string; user: User });
     const token: string = payload.token;
+    const refreshToken: string | undefined = payload.refreshToken;
     const user: User = payload.user ?? (payload as unknown as User);
-    await saveAuth(token, user);
+    await saveAuth(token, user, refreshToken);
     set({ user, token, isAuthenticated: true });
     connectSocket(token);
+    // Send push token to backend (best-effort, non-blocking)
+    void getExpoPushToken().then((pushToken) => {
+      if (pushToken) void savePushTokenApi(pushToken).catch(() => {});
+    });
     return { user, token };
   },
 
@@ -61,16 +68,27 @@ const useAuthStore = create<AuthState>((set) => ({
     data: Omit<RegisterData, 'role'>
   ): Promise<{ user: User; token: string }> => {
     const res = await registerApi({ ...data, role: 'MERCHANT' });
-    const payload = res.data.data || (res.data as unknown as { token: string; user: User });
+    const payload = res.data.data || (res.data as unknown as { token: string; refreshToken?: string; user: User });
     const token: string = payload.token;
+    const refreshToken: string | undefined = payload.refreshToken;
     const user: User = payload.user ?? (payload as unknown as User);
-    await saveAuth(token, user);
+    await saveAuth(token, user, refreshToken);
     set({ user, token, isAuthenticated: true });
     connectSocket(token);
+    // Send push token to backend (best-effort, non-blocking)
+    void getExpoPushToken().then((pushToken) => {
+      if (pushToken) void savePushTokenApi(pushToken).catch(() => {});
+    });
     return { user, token };
   },
 
   logout: async (): Promise<void> => {
+    try {
+      const refreshToken = await AsyncStorage.getItem('refreshToken');
+      if (refreshToken) await logoutApi(refreshToken);
+    } catch {
+      // best-effort — still clear local state
+    }
     await clearAuth();
     disconnectSocket();
     set({ user: null, token: null, isAuthenticated: false });

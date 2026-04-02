@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Image,
-  KeyboardAvoidingView, Platform, Switch, StyleSheet,
+  KeyboardAvoidingView, Platform, Switch, StyleSheet, Alert,
 } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -12,7 +12,7 @@ import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import { showToast } from '../../components/common/Toast';
-import { getMenuApi, updateMenuItemApi } from '../../api/menu.api';
+import { getCategoriesApi, getMenuApi, updateMenuItemApi, deleteMenuItemApi } from '../../api/menu.api';
 import { uploadMenuItemImage } from '../../api/upload.api';
 import useRestaurantStore from '../../store/restaurant.store';
 import useMerchantType from '../../hooks/useMerchantType';
@@ -69,19 +69,27 @@ export default function EditMenuItemScreen(): React.JSX.Element {
   useEffect(() => {
     const loadData = async (): Promise<void> => {
       try {
-        const res = await getMenuApi(restaurantId);
-        const data = res.data.data;
+        const [menuRes, catRes] = await Promise.all([
+          getMenuApi(restaurantId),
+          getCategoriesApi(restaurantId),
+        ]);
 
+        setCategories(catRes.data.data?.categories ?? []);
+
+        const data = menuRes.data.data;
         let item: MenuItem | null = null;
+
         if (Array.isArray(data)) {
           item = (data as MenuItem[]).find((i) => i.id === id) ?? null;
+        } else if (data && (data as { products?: MenuItem[] }).products) {
+          item = (data as { products: MenuItem[] }).products.find((i) => i.id === id) ?? null;
         } else if (data && (data as { categories?: MenuCategory[] }).categories) {
-          const typedData = data as { categories: MenuCategory[] };
-          setCategories(typedData.categories);
-          typedData.categories.forEach((cat) => {
+          (data as { categories: MenuCategory[] }).categories.forEach((cat) => {
             const found = (cat.items ?? cat.menuItems ?? []).find((i) => i.id === id);
             if (found) item = found;
           });
+        } else if (data && (data as { menuItems?: MenuItem[] }).menuItems) {
+          item = (data as { menuItems: MenuItem[] }).menuItems.find((i) => i.id === id) ?? null;
         }
 
         if (item) {
@@ -175,7 +183,29 @@ export default function EditMenuItemScreen(): React.JSX.Element {
           <Ionicons name="arrow-back" size={24} color={colors.navy} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Edit {Item}</Text>
-        <View style={{ width: 32 }} />
+        <TouchableOpacity
+          style={styles.deleteBtn}
+          onPress={() => {
+            Alert.alert('Delete Item', 'Are you sure?', [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: async () => {
+                  try {
+                    await deleteMenuItemApi(restaurantId, id);
+                    showToast({ type: 'success', message: `${Item} deleted` });
+                    router.back();
+                  } catch {
+                    showToast({ type: 'error', message: `Failed to delete ${item}` });
+                  }
+                },
+              },
+            ]);
+          }}
+        >
+          <Ionicons name="trash-outline" size={22} color={colors.error} />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -353,6 +383,7 @@ const styles = StyleSheet.create({
   },
   backBtn: { padding: 4 },
   headerTitle: { fontFamily: 'Sora_700Bold', fontSize: 17, color: colors.navy },
+  deleteBtn: { padding: 4 },
   content: { padding: 20, paddingBottom: 40 },
   imagePicker: { alignSelf: 'center', marginBottom: 24 },
   itemImage: { width: 140, height: 140, borderRadius: 16, resizeMode: 'cover' },

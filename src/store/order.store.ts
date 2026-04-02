@@ -41,6 +41,8 @@ const useOrderStore = create<OrderState>((set) => ({
         (o) => o.status === 'PENDING' || o.status === 'CONFIRMED'
       ).length;
       set({ newOrderCount: pendingCount });
+    } catch {
+      // ignore — keep existing orders
     } finally {
       set({ isLoading: false });
     }
