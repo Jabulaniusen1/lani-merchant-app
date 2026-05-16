@@ -54,7 +54,7 @@ The API uses a two-token model:
 | **Refresh token** (opaque) | `JWT_REFRESH_EXPIRES_IN` (default `30d`) | Stored securely on device; sent to `POST /auth/refresh` to get a new access token |
 
 **Flow:**
-1. `POST /auth/login` or `POST /auth/register` → receive `token` (access) + `refreshToken`
+1. `POST /auth/login`, `POST /auth/register`, or `POST /auth/google` → receive `token` (access) + `refreshToken`
 2. Use `token` for all API calls
 3. When the access token expires, call `POST /auth/refresh` with `{ "refreshToken": "..." }` → receive a new access token **and a new refresh token** (the old refresh token is immediately invalidated — always store the latest one)
 4. On logout, call `POST /auth/logout` with the refresh token to invalidate it server-side
@@ -255,6 +255,34 @@ Login with email and password.
 
 ---
 
+#### POST `/auth/google`
+Login or signup with Google ID token.
+
+**Public** | No token required
+
+**Request Body:**
+```json
+{
+  "idToken": "<google id token from client>",
+  "phone": "08012345678",
+  "role": "MERCHANT",
+  "merchantType": "RESTAURANT"
+}
+```
+
+**Notes:**
+- Existing user (matched by email): logs in immediately.
+- First-time Google signup requires `phone`.
+- `role` defaults to `CUSTOMER` if omitted. Set `role: "MERCHANT"` for merchant signup.
+- If role is `MERCHANT`, you can optionally pass `merchantType` (`RESTAURANT` | `PHARMACY` | `SUPERMARKET`; default `RESTAURANT`).
+- Google signup creates the related merchant/rider profile automatically when role is `MERCHANT`/`RIDER`.
+
+**Response:**
+- `200` for existing user login
+- `201` for newly created user signup
+
+---
+
 #### GET `/auth/me`
 Get the currently authenticated user's profile.
 
@@ -377,6 +405,38 @@ Create a new store (restaurant, pharmacy branch, or supermarket branch).
 > `restaurantType` options: `FAST_FOOD` | `LOCAL` | `CONTINENTAL` | `PIZZA` | `GRILL` | `BAKERY` | `CAFE` | `CHINESE` | `SEAFOOD` | `VEGETARIAN`
 > `restaurantType` is silently ignored for `PHARMACY` and `SUPERMARKET` merchants.
 > On successful store creation, default categories are auto-seeded based on merchant type.
+
+---
+
+#### GET `/restaurants`
+List/browse stores with optional search filters, including proximity ("closer to me").
+
+**Public** | No token required
+
+**Query Params (all optional):**
+| Param | Type | Description |
+|-------|------|-------------|
+| `city` | string | Case-insensitive city filter |
+| `search` | string | Case-insensitive store name search |
+| `merchantType` | string | `RESTAURANT` \| `PHARMACY` \| `SUPERMARKET` |
+| `restaurantType` | string | Restaurant cuisine type enum |
+| `latitude` | number | User latitude (must be sent with `longitude`) |
+| `longitude` | number | User longitude (must be sent with `latitude`) |
+| `radiusKm` | number | Max distance in km from user location (requires lat/lng) |
+| `sortBy` | string | `rating` (default) or `distance` (requires lat/lng) |
+
+**Example (closest stores within 5km):**
+```http
+GET /api/v1/restaurants?search=rice&latitude=6.5244&longitude=3.3792&radiusKm=5&sortBy=distance
+```
+
+**Behavior notes:**
+- When `latitude` + `longitude` are provided, each store in the response includes `distanceKm` (rounded to 1 decimal place).
+- Stores without saved coordinates return `distanceKm: null` and are excluded when `radiusKm` is used.
+- Validation errors:
+  - `latitude` and `longitude` must be sent together
+  - `radiusKm` must be greater than 0
+  - `sortBy=distance` requires `latitude` + `longitude`
 
 ---
 

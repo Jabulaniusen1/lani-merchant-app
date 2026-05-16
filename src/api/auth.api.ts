@@ -1,6 +1,7 @@
-import type { AxiosResponse } from 'axios';
+import axios, { type AxiosResponse } from 'axios';
 import client from './client';
 import type { ApiResponse, User } from '../types';
+import { BASE_URL } from '../utils/constants';
 
 export interface LoginResponseData {
   token: string;
@@ -70,7 +71,7 @@ export const updateProfileApi = (data: {
   client.patch('/auth/me', data);
 
 export const logoutApi = (refreshToken: string): Promise<AxiosResponse<ApiResponse<unknown>>> =>
-  client.post('/auth/logout', { refreshToken });
+  axios.post(`${BASE_URL}/auth/logout`, { refreshToken });
 
 export const changePasswordApi = (
   currentPassword: string,

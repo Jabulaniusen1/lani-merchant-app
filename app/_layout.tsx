@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -15,12 +15,14 @@ import {
   DMSans_600SemiBold,
 } from '@expo-google-fonts/dm-sans';
 import * as SplashScreen from 'expo-splash-screen';
+import * as Notifications from 'expo-notifications';
 import ToastProvider from '../src/components/common/Toast';
 import { requestNotificationPermission } from '../src/services/notifications';
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout(): React.JSX.Element | null {
+  const router = useRouter();
   const [fontsLoaded] = useFonts({
     Sora_400Regular,
     Sora_600SemiBold,
@@ -36,6 +38,14 @@ export default function RootLayout(): React.JSX.Element | null {
       requestNotificationPermission();
     }
   }, [fontsLoaded]);
+
+  // Navigate to Orders tab when merchant taps any push notification
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener(() => {
+      router.push('/(main)/orders');
+    });
+    return () => sub.remove();
+  }, []);
 
   if (!fontsLoaded) return null;
 

@@ -18,7 +18,7 @@ import { showToast } from '../../components/common/Toast';
 import OrderCard from '../../components/orders/OrderCard';
 import useMerchantType from '../../hooks/useMerchantType';
 import useSocket from '../../hooks/useSocket';
-import { showNewOrderNotification } from '../../services/notifications';
+import { showNewOrderNotification, showOrderCancelledNotification, showRiderAssignedNotification } from '../../services/notifications';
 import { getSocket } from '../../services/socket';
 import useAuthStore from '../../store/auth.store';
 import useOrderStore from '../../store/order.store';
@@ -108,18 +108,20 @@ export default function OrdersScreen(): React.JSX.Element {
       const id = data.id ?? data.orderId ?? '';
       updateOrderInList(id, { status: 'CANCELLED' });
       showToast({ type: 'warning', message: 'Customer cancelled an order' });
+      void showOrderCancelledNotification();
     };
 
     const handleOrderConfirmed = (data: OrderConfirmedPayload): void => {
       const id = data.orderId ?? data.id ?? '';
       updateOrderInList(id, { status: 'CONFIRMED' });
-      showToast({ type: 'success', message: 'Payment received — order confirmed!' });
+      // order_confirmed fires alongside new_order — no extra notification needed here
     };
 
     const handleRiderAssigned = (data: RiderAssignedPayload): void => {
       const id = data.orderId ?? data.id ?? '';
       updateOrderInList(id, { rider: data.rider, status: 'OUT_FOR_DELIVERY' });
       showToast({ type: 'info', message: 'Rider assigned to order' });
+      void showRiderAssignedNotification();
     };
 
     socket.on('new_order', handleNewOrder);

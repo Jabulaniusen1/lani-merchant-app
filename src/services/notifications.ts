@@ -33,6 +33,34 @@ export const showNewOrderNotification = async (order: NewOrderPayload): Promise<
   }
 };
 
+export const showOrderCancelledNotification = async (): Promise<void> => {
+  try {
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Order Cancelled',
+        body: 'A customer cancelled their order.',
+        sound: true,
+      },
+      trigger: null,
+    });
+  } catch {}
+};
+
+export const showRiderAssignedNotification = async (): Promise<void> => {
+  try {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Rider Assigned',
+        body: 'A rider has accepted a delivery and is heading to your store.',
+        sound: true,
+      },
+      trigger: null,
+    });
+  } catch {}
+};
+
 export const getExpoPushToken = async (): Promise<string | null> => {
   try {
     if (!Device.isDevice) return null;

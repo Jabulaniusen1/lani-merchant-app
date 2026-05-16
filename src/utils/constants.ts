@@ -1,7 +1,7 @@
 import type { OrderStatus } from '../types';
 
-export const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000/api/v1';
-export const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL ?? 'http://localhost:8000';
+export const BASE_URL = 'https://lani-backend.onrender.com/api/v1';
+export const SOCKET_URL = 'https://lani-backend.onrender.com';
 export const CLOUDINARY_CLOUD_NAME = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME ?? '';
 export const CLOUDINARY_UPLOAD_PRESET = process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET ?? 'lanieats_merchants';
 

@@ -24,7 +24,7 @@ export const updateMenuItemApi = (
   itemId: string,
   data: Partial<MenuItem>
 ): Promise<AxiosResponse<ApiResponse<{ menuItem: MenuItem }>>> =>
-  client.put(`/restaurants/${restaurantId}/menu/${itemId}`, data);
+  client.patch(`/restaurants/${restaurantId}/menu/${itemId}`, data);
 
 export const deleteMenuItemApi = (
   restaurantId: string,
@@ -37,7 +37,7 @@ export const toggleMenuItemAvailabilityApi = (
   itemId: string,
   isAvailable: boolean
 ): Promise<AxiosResponse<ApiResponse<{ menuItem: MenuItem }>>> =>
-  client.put(`/restaurants/${restaurantId}/menu/${itemId}`, { isAvailable });
+  client.patch(`/restaurants/${restaurantId}/menu/${itemId}`, { isAvailable });
 
 export const getCategoriesApi = (
   restaurantId: string
