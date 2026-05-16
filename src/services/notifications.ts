@@ -61,6 +61,34 @@ export const showRiderAssignedNotification = async (): Promise<void> => {
   } catch {}
 };
 
+export const showFoodPickedUpNotification = async (): Promise<void> => {
+  try {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Food Picked Up',
+        body: 'The rider has picked up the food and is on the way to the customer.',
+        sound: true,
+      },
+      trigger: null,
+    });
+  } catch {}
+};
+
+export const showOrderDeliveredNotification = async (): Promise<void> => {
+  try {
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Order Delivered!',
+        body: 'The order has been successfully delivered to the customer.',
+        sound: true,
+      },
+      trigger: null,
+    });
+  } catch {}
+};
+
 export const getExpoPushToken = async (): Promise<string | null> => {
   try {
     if (!Device.isDevice) return null;

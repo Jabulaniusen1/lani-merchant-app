@@ -18,14 +18,14 @@ import { showToast } from '../../components/common/Toast';
 import OrderCard from '../../components/orders/OrderCard';
 import useMerchantType from '../../hooks/useMerchantType';
 import useSocket from '../../hooks/useSocket';
-import { showNewOrderNotification, showOrderCancelledNotification, showRiderAssignedNotification } from '../../services/notifications';
+import { showNewOrderNotification, showOrderCancelledNotification, showRiderAssignedNotification, showFoodPickedUpNotification, showOrderDeliveredNotification } from '../../services/notifications';
 import { getSocket } from '../../services/socket';
 import useAuthStore from '../../store/auth.store';
 import useOrderStore from '../../store/order.store';
 import useRestaurantStore from '../../store/restaurant.store';
 import { colors } from '../../theme/colors';
 
-import type { NewOrderPayload, Order, OrderCancelledPayload, OrderConfirmedPayload, OrderStatus, RiderAssignedPayload } from '../../types';
+import type { DeliveryStatusUpdatedPayload, NewOrderPayload, Order, OrderCancelledPayload, OrderConfirmedPayload, OrderDeliveredPayload, OrderStatus, RiderAssignedPayload } from '../../types';
 import { ORDER_FILTER_TABS } from '../../utils/constants';
 
 function getApiErrorMessage(error: unknown, fallback: string): string {
@@ -124,16 +124,36 @@ export default function OrdersScreen(): React.JSX.Element {
       void showRiderAssignedNotification();
     };
 
+    const handleDeliveryStatusUpdated = (data: DeliveryStatusUpdatedPayload): void => {
+      if (data.deliveryStatus === 'PICKED_UP') {
+        updateOrderInList(data.orderId, { status: 'OUT_FOR_DELIVERY' });
+        showToast({ type: 'info', message: 'Rider has picked up the food' });
+        void showFoodPickedUpNotification();
+      } else if (data.deliveryStatus === 'DELIVERED') {
+        updateOrderInList(data.orderId, { status: 'DELIVERED' });
+        showToast({ type: 'success', message: 'Order delivered to customer!' });
+        void showOrderDeliveredNotification();
+      }
+    };
+
+    const handleOrderDelivered = (data: OrderDeliveredPayload): void => {
+      updateOrderInList(data.orderId, { status: 'DELIVERED' });
+    };
+
     socket.on('new_order', handleNewOrder);
     socket.on('order_confirmed', handleOrderConfirmed);
     socket.on('order_cancelled', handleOrderCancelled);
     socket.on('rider_assigned', handleRiderAssigned);
+    socket.on('delivery_status_updated', handleDeliveryStatusUpdated);
+    socket.on('order_delivered', handleOrderDelivered);
 
     return () => {
       socket.off('new_order', handleNewOrder);
       socket.off('order_confirmed', handleOrderConfirmed);
       socket.off('order_cancelled', handleOrderCancelled);
       socket.off('rider_assigned', handleRiderAssigned);
+      socket.off('delivery_status_updated', handleDeliveryStatusUpdated);
+      socket.off('order_delivered', handleOrderDelivered);
     };
   }, [addOrder, updateOrderInList]);
 

@@ -210,6 +210,16 @@ export interface RiderAssignedPayload {
   message?: string;
 }
 
+export interface DeliveryStatusUpdatedPayload {
+  orderId: string;
+  deliveryStatus: 'PICKED_UP' | 'DELIVERED' | 'FAILED';
+  updatedAt: string;
+}
+
+export interface OrderDeliveredPayload {
+  orderId: string;
+}
+
 // ─── Finance types ────────────────────────────────────────────────────────────
 
 export interface BankAccount {
