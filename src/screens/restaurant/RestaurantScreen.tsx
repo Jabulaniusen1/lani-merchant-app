@@ -173,6 +173,15 @@ export default function RestaurantScreen(): React.JSX.Element {
                     style={styles.actionBtn}
                   />
                 </View>
+                <TouchableOpacity
+                  style={styles.hoursRow}
+                  onPress={() => router.push(`/(main)/restaurant/hours/${item.id}` as any)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="time-outline" size={16} color={colors.primary} />
+                  <Text style={styles.hoursRowText}>Set Operating Hours</Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+                </TouchableOpacity>
               </View>
             ))}
           </>
@@ -322,6 +331,22 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   actionBtn: { flex: 1 },
+  hoursRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    borderTopWidth: 1,
+    borderTopColor: colors.lightGray,
+  },
+  hoursRowText: {
+    flex: 1,
+    fontFamily: 'DMSans_500Medium',
+    fontSize: 14,
+    color: colors.primary,
+  },
   fab: {
     position: 'absolute',
     bottom: 24,

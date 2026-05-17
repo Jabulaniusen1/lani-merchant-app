@@ -11,7 +11,19 @@
       "Bash(__NEW_LINE_27fef0ce5eaeb38d__ echo:*)",
       "Read(//Users/mac/Desktop/lanieats code base/lani-merchants-app/.claude/worktrees/agent-a7f68cb4/$BASE/**)",
       "Read(//Users/mac/Desktop/lanieats code base/lani-merchants-app/.claude/worktrees/agent-a7f68cb4/**)",
-      "Bash(node -e \"const ip = require\\(''expo-image-picker''\\); console.log\\(Object.keys\\(ip\\).filter\\(k => k.toLowerCase\\(\\).includes\\(''media''\\)\\)\\)\")"
+      "Bash(node -e \"const ip = require\\(''expo-image-picker''\\); console.log\\(Object.keys\\(ip\\).filter\\(k => k.toLowerCase\\(\\).includes\\(''media''\\)\\)\\)\")",
+      "Bash(find \"/Users/mac/Desktop/lanieats code base\" -maxdepth 1 -type d | grep -v \"lani-backend\\\\|lani-merchants\\\\|lani-rider\")",
+      "Read(//Users/mac/Desktop/lanieats code base/**)",
+      "Bash(xargs ls)",
+      "Bash(npx tsc *)",
+      "Bash(xargs cat)"
+    ],
+    "additionalDirectories": [
+      "/Users/mac/Desktop/lanieats code base/lani-user-app/app/(protected)/tracking",
+      "/Users/mac/Desktop/lanieats code base/lani-user-app/app/(protected)",
+      "/Users/mac/Desktop/lanieats code base/lani-user-app/app/(tabs)",
+      "/Users/mac/Desktop/lanieats code base/lani-user-app/services",
+      "/Users/mac/Desktop/lanieats code base/lani-user-app/app"
     ]
   }
 }
