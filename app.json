@@ -4,7 +4,7 @@
     "slug": "lani-merchants-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/lani_merchant_icon_512x512.png",
     "scheme": "lanimerchantsapp",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
@@ -14,7 +14,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/dark_on_orange.png",
+        "foregroundImage": "./assets/images/lani_merchant_icon_512x512.png",
         "backgroundColor": "#FF6B00"
       },
       "edgeToEdgeEnabled": true,
@@ -51,7 +51,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/icon.png",
+          "icon": "./assets/images/lani_merchant_icon_512x512.png",
           "color": "#FF6B00"
         }
       ],
